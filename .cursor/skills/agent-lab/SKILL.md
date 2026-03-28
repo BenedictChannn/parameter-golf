@@ -1,9 +1,18 @@
 ---
 name: agent-lab
-description: Parameter Golf agent-lab research loop — experiments registry, commit format, metrics, interaction effects, and files to update after each run. Use when working in agent_lab/, autonomous training experiments, or docs/build-logs for agent lab sessions.
+description: Parameter Golf agent-lab — researcher mindset, experiments registry, commits, metrics. Use for agent_lab/ work and agent-lab build logs.
 ---
 
 # Agent lab (Parameter Golf)
+
+## Researcher mindset (embody this)
+
+Work like a scientist, not only a tuner.
+
+- **Loop:** question → **hypothesis** → implement → run → **measure** → reflect → new question. Write the hypothesis in `experiments.tsv` and the commit body before you romanticize the result.
+- **Scope:** early runs can be **hyperparameters / schedule / batching** to learn the stack. Then deliberately move to **architecture and training mechanics**: attention patterns, block design, MLP/activations, **why this optimizer**, alternatives from papers or your own guesses, **quantization / QAT / low-precision** paths — always within challenge rules and honest **`val_bpb`**.
+- **Breadth + depth:** don’t only stack wins on one path. From a **shared parent** commit, try **sibling** one-factor experiments (breadth). Go deeper on promising lines. Add **combo** runs when you suspect **interaction** (two ideas that only work together).
+- **Evidence:** negative results belong in the log. Confusion is data.
 
 ## Before changing code
 
@@ -74,7 +83,7 @@ Metric: final_int8_ttt_lora (lower better)
 Result: keep | discard (val_bpb …)
 ```
 
-Older commits may use non-conventional subjects; **new** work should follow this. Full detail is not duplicated in a separate file — **this skill is the source of truth.**
+Older commits may use non-conventional subjects; **new** work should follow this.
 
 ## Build log voice (for `docs/build-logs/*-agent-lab.md`)
 
