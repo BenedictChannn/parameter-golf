@@ -1,6 +1,6 @@
 ---
 name: agent-lab
-description: Parameter Golf agent-lab research loop — experiments registry, commit format, metrics, and files to update after each run. Use when working in agent_lab/, autonomous training experiments, or docs/build-logs for agent lab sessions.
+description: Parameter Golf agent-lab research loop — experiments registry, commit format, metrics, interaction effects, and files to update after each run. Use when working in agent_lab/, autonomous training experiments, or docs/build-logs for agent lab sessions.
 ---
 
 # Agent lab (Parameter Golf)
@@ -15,21 +15,80 @@ description: Parameter Golf agent-lab research loop — experiments registry, co
 
 1. Append **`agent_lab/results.tsv`** (gitignored loop log) if you use it — columns per `program.md`.
 2. Append **`agent_lab/experiments.tsv`** (tracked) with stable **`AL-YYYYMMDD-NNN`** id, parent commit, hypothesis, **verdict** (`correct` / `wrong` / `partial` / `n_a`), metric, `val_bpb`, notes.
-3. Commit with **`feat(agent-lab):`** or **`docs(agent-lab):`** and **rich body** (see **`agent_lab/COMMIT_CONVENTIONS.md`**).
-4. Update **`docs/build-logs/<date>-agent-lab.md`** — short journal entry: what you believed, what happened, what you learned.
+3. Commit with **`feat(agent-lab):`** or **`docs(agent-lab):`** and **rich body** (see **Commit conventions** below).
+4. Update **`docs/build-logs/<date>-agent-lab.md`** — journal entry in a **human voice** (see **Build log voice** below).
+
+## One-at-a-time vs interaction effects (important)
+
+**Default loop:** change **one** thing between commits when you can — attribution is clean and matches a disciplined ablation.
+
+**Reality:** some ideas only work **together** (e.g. smaller batch + higher LR). Pure hill-climbing can **discard** a change that looks neutral alone but is needed for a later combo.
+
+**Practices:**
+
+- Keep the **spine** of verified wins; occasionally spawn a **combo** experiment (`Exp: …-combo`) that stacks 2–3 pending ideas and compare to the best single-change line.
+- If a single change **hurts** or is flat, note **`wrong` or `partial`** but add a **follow-up** row if you suspect **interaction** — don’t treat “no immediate gain” as permanently dead without a designed retest.
+- Log **interaction hypotheses** explicitly in `experiments.tsv` notes and the build log so future you (or an agent) can see what was never tried together.
 
 ## Stable experiment IDs
 
 - Pattern: **`AL-YYYYMMDD-NNN`** (NNN = 001, 002, … per day).
 - Same ID in: `experiments.tsv`, commit body `Exp:`, build log headings.
 
-## Primary metric
+## Primary metric and the three “final” lines
 
-Default: **`final_int8_ttt_lora`** line — lower **`val_bpb`** is better. Do not mix with zlib roundtrip across comparisons unless documented.
+The training script prints several finals. Typical meanings:
 
-## Official challenge time limits (leaderboard)
+| Log line | Meaning |
+|----------|--------|
+| **`final_int8_zlib_roundtrip`** | Model weights are **quantized to int8**, **zlib-compressed**, **decompressed**, loaded back into the model, then **standard validation** `eval_val` runs. Tests **compression + roundtrip correctness** and reports **`val_bpb`**. |
+| **`final_int8_zlib_roundtrip_exact`** | Same metric, **more decimal places** (debug / tie-break), not a different method. |
+| **`final_int8_ttt_lora`** | After the roundtrip weights, the script runs **test-time training** with **LoRA adapters** on the validation procedure (challenge-relevant path). Often the **primary** score for comparisons in this repo. |
 
-Training **and** evaluation each have a **~10 minute** budget on **8×H100** for record submissions — see **`agent_lab/CHALLENGE_TIMELIMITS.md`**. Local dev on other GPUs can exceed that; optimize the **script** so official eval still fits when you submit.
+**Lower `val_bpb` is better** for all. Don’t mix zlib-only vs TTT lines in the same leaderboard unless you document the switch.
+
+## Artifact size (16 MB cap)
+
+Submission size = **UTF-8 bytes of training code** + **compressed model** (see main README). **`Total submission size int8+zlib:`** in the log is a good sanity check. If you are at **~9.9 MB** compressed payload + code, you still have **headroom** toward **16,000,000 bytes** — room for **wider layers**, **more parameters**, or **less aggressive compression**, as long as train/eval still meet official limits.
+
+## Official challenge time limits (leaderboard / record)
+
+From the project README FAQ:
+
+- **Training:** **≤ ~10 minutes on 8× H100 (SXM)** for record submissions.
+- **Evaluation:** **≤ ~10 minutes on 8× H100** as well — **in addition to** training, not one combined 10-minute window.
+
+**Local dev** (e.g. 1× 3090, long TTT wall time) is **not** proof you meet the official eval cap. Before claiming a record, run the **full** train + eval pipeline on **8× H100** (or the official harness) and confirm **both** phases fit.
+
+## Commit conventions (Conventional Commits)
+
+**Subject:** `<type>(agent-lab): <imperative short description>` — types: `feat`, `fix`, `docs`, `chore`, `refactor`.
+
+**Body (recommended):** grep-friendly block:
+
+```
+Exp: AL-YYYYMMDD-NNN
+Parent: <7-char sha>
+Hypothesis: <one sentence>
+Metric: final_int8_ttt_lora (lower better)
+Result: keep | discard (val_bpb …)
+```
+
+Older commits may use non-conventional subjects; **new** work should follow this. Full detail is not duplicated in a separate file — **this skill is the source of truth.**
+
+## Build log voice (for `docs/build-logs/*-agent-lab.md`)
+
+Write like a **lab notebook**, not a press release. It is useful to:
+
+- Say what you **expected**, what **confused** you, and what still **doesn’t make sense**.
+- Admit **dead ends** and **silly mistakes** — that saves the next session from repeating them.
+- Mix **plain-language** explanations (for learning) with **exact numbers and commits**.
+
+If the prose sounds too polished, add one paragraph of **raw** “what I actually think.”
+
+## Run script
+
+From repo root, prefer **`./scripts/agent_lab/run_exp.sh`** (sets defaults for `RUN_ID`, `DATA_PATH`, `TOKENIZER_PATH`, activates `.venv` if present). Redirect logs yourself, e.g. `> agent_lab/run.log 2>&1`.
 
 ## Adapt this skill
 

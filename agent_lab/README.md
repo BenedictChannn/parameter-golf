@@ -15,16 +15,14 @@ Design is inspired by [karpathy/autoresearch](https://github.com/karpathy/autore
    cp train_gpt.py agent_lab/train_gpt.py
    ```
 
-3. **Run a single experiment** (from repo root; adjust GPUs to your machine):
+3. **Run a single experiment** (from repo root). Recommended wrapper (activates `.venv`, sets `RUN_ID` if unset):
    ```bash
    cd /path/to/parameter-golf
-   RUN_ID=agent_lab_smoke \
-   DATA_PATH=./data/datasets/fineweb10B_sp1024/ \
-   TOKENIZER_PATH=./data/tokenizers/fineweb_1024_bpe.model \
-   VOCAB_SIZE=1024 \
-   torchrun --standalone --nproc_per_node=1 agent_lab/train_gpt.py \
-     > agent_lab/run.log 2>&1
+   RUN_ID=agent_lab_smoke ./scripts/agent_lab/run_exp.sh > agent_lab/run.log 2>&1
    ```
+   Or set env vars yourself and call `torchrun` as in the main README.
+
+   **Artifact headroom:** the log line `Total submission size int8+zlib:` is code + compressed weights. The challenge cap is **16,000,000 bytes** total — if you see **~9.9 MB** there, you still have room to grow the model or change compression **as long as** train/eval stay within official limits.
 
 4. **Point your agent at `program.md`** and the Cursor skill **[`.cursor/skills/agent-lab/SKILL.md`](../.cursor/skills/agent-lab/SKILL.md)** (workflow + what to update after each run).
 
@@ -37,8 +35,8 @@ Design is inspired by [karpathy/autoresearch](https://github.com/karpathy/autore
 | `program.md` | Instructions for the LLM (setup, loop, grep patterns, constraints). |
 | `train_gpt.py` | Editable copy of the baseline training script; **do not edit root `train_gpt.py` for agent-lab runs** unless you intend to change the shared baseline. |
 | `experiments.tsv` | **Structured experiment registry** — stable IDs `AL-YYYYMMDD-NNN`, parent commit, hypothesis, **verdict**, metrics (for humans + agents). **Commit this** when you add rows. |
-| `COMMIT_CONVENTIONS.md` | **Conventional Commits** (`feat(agent-lab):` …) and **rich commit body** template (`Exp:`, `Hypothesis:`, …). |
-| `CHALLENGE_TIMELIMITS.md` | Official **train** and **eval** time limits for leaderboard (both ~10 min on **8×H100**). |
+| [`.cursor/skills/agent-lab/SKILL.md`](../.cursor/skills/agent-lab/SKILL.md) | **Commit conventions**, metric line meanings, official time limits, interaction effects, build-log voice. |
+| [`scripts/agent_lab/run_exp.sh`](../scripts/agent_lab/run_exp.sh) | Default env + `torchrun` from repo root (optional). |
 
 `results.tsv` and `run.log` are gitignored; create them per `program.md`.
 

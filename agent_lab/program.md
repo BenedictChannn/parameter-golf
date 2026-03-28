@@ -71,7 +71,7 @@ Do not commit `results.tsv`.
 
 **Also append [`agent_lab/experiments.tsv`](experiments.tsv)** (tracked): one row per experiment with `exp_id`, parent commit, hypothesis, **verdict** (`correct` / `wrong` / `partial` / `n_a`), metric, `val_bpb`, notes.
 
-**Commits:** use **Conventional Commits** with scope `agent-lab` and a **rich body** (`Exp:`, `Parent:`, `Hypothesis:`, `Result:`). See [`COMMIT_CONVENTIONS.md`](COMMIT_CONVENTIONS.md). Official train **and** eval time limits for leaderboard: [`CHALLENGE_TIMELIMITS.md`](CHALLENGE_TIMELIMITS.md).
+**Commits:** use **Conventional Commits** with scope `agent-lab` and a **rich body** (`Exp:`, `Parent:`, `Hypothesis:`, `Result:`). See [`.cursor/skills/agent-lab/SKILL.md`](../.cursor/skills/agent-lab/SKILL.md) (**Commit conventions** + official time limits).
 
 **Human journal / pedagogy:** update **`docs/build-logs/<date>-agent-lab.md`** with thoughts, what changed in code, and lessons — not only numbers.
 
@@ -81,7 +81,7 @@ Branch: `agent_lab/<tag>` or `agent_lab/<tag>-gpu0`.
 
 1. Note branch/commit.
 2. Change **`agent_lab/train_gpt.py`** (one idea).
-3. `git add agent_lab/train_gpt.py && git commit` — subject **`feat(agent-lab): …`** (see [`COMMIT_CONVENTIONS.md`](COMMIT_CONVENTIONS.md))
+3. `git add agent_lab/train_gpt.py && git commit` — subject **`feat(agent-lab): …`** (see [agent-lab SKILL](../.cursor/skills/agent-lab/SKILL.md))
 4. `torchrun ... agent_lab/train_gpt.py > agent_lab/run.log 2>&1` (no `tee`; full redirect).
 5. `grep '^final_int8_ttt_lora\|^peak memory allocated' agent_lab/run.log` (adjust grep if you chose the zlib metric).
 6. Empty primary line → likely crash → `tail -n 80 agent_lab/run.log`; fix trivial errors or log `crash` and revert.
