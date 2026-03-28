@@ -4,6 +4,8 @@ This folder implements an autonomous experiment loop for Parameter Golf: a codin
 
 Design is inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch) (upstream project name unchanged).
 
+**Runtime note:** On some Linux hosts, `torch` wheels built for CUDA 13.x fail driver init; this workspace used **`pip install torch==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124`** in `.venv`. Full train + **`final_int8_ttt_lora`** eval can take **~35–40 min** per run on a 3090 (TTT eval dominates).
+
 ## Human quickstart
 
 1. **Data** (once): from repo root, follow the main [README](../README.md) to download FineWeb + tokenizer (e.g. `python3 data/cached_challenge_fineweb.py --variant sp1024`).
