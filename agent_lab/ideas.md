@@ -61,6 +61,8 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - the current frontier suggests depth helps, but we have not yet asked whether `MLP_MULT` is the better place to spend parameters
 - Status: active
 - Related tranche: [`T-20260329-B`](./tranches.md#t-20260329-b---architecture-necessity-audit)
+- Evidence so far:
+- [`AL-20260329-007`](./experiments.tsv) says pure width at fixed depth is not promising in this naive form; it was slower, worse, and oversize
 
 ### I-20260329-010 - The Current MLP May Already Be Too Wide
 
