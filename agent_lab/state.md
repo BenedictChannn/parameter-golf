@@ -33,10 +33,10 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Next Planned Runs
 
-- `B1-E1`: replay the `10L / MLP2 / 196608 / kv2` anchor.
-- `B1-E2`: test `11L / MLP1 / 196608 / kv2`.
-- `B1-E3`: test `9L / MLP3 / 196608 / kv2`.
-- `B1-E4`: test `8L / MLP3 / 196608 / kv2`.
+- `B1-E1`: test `10L / MLP1 / 196608 / kv2` to ask whether the current MLP is too wide.
+- `B1-E2`: test `10L / MLP3 / 196608 / kv2` to ask whether pure width helps at fixed depth.
+- `B1-E3`: test `11L / MLP1 / 196608 / kv2` to trade width for one more layer.
+- `B1-E4`: test `9L / MLP3 / 196608 / kv2` to trade one layer for more width.
 - `B1-E5`: test `9L / MLP3 / 131072 / kv2` to ask whether width also needs step recovery.
 
 ## Go Deeper

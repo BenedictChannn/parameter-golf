@@ -157,14 +157,15 @@ With the current `10`-layer line, are we getting more value from extra transform
 
 | ID | Shape | Goal | Hypothesis | What it teaches |
 |---|---|---|---|---|
-| `B1-E1` | `10L / MLP2 / batch 196608 / kv2` | Replay the clean anchor | The current `10L x MLP2` balance is still the right starting point | Whether later differences are real or just runtime noise |
-| `B1-E2` | `11L / MLP1 / batch 196608 / kv2` | Test deeper but thinner | The current model may be overspending on MLP width | Whether more layers beat the current block-internal capacity |
-| `B1-E3` | `9L / MLP3 / batch 196608 / kv2` | Test mild width reallocation | Some capacity is better spent inside each block than on one extra layer | Whether width can replace a layer cleanly |
-| `B1-E4` | `8L / MLP3 / batch 196608 / kv2` | Push farther toward width | If width is the missing ingredient, shallower-wider should stay competitive | Whether the frontier bends toward width, not depth |
-| `B1-E5` | `9L / MLP3 / batch 131072 / kv2` | Test width with more steps | Width may also need step recovery, like depth did | Whether a width loss is fundamental or just step-starvation |
+| `B1-E1` | `10L / MLP1 / batch 196608 / kv2` | Test a thinner MLP at fixed depth | The current `MLP_MULT=2` may already be wider than this regime needs | Whether reducing MLP width helps by freeing compute without losing too much quality |
+| `B1-E2` | `10L / MLP3 / batch 196608 / kv2` | Test a wider MLP at fixed depth | The current model may be under-spending capacity inside each block | Whether pure width helps before we change layer count |
+| `B1-E3` | `11L / MLP1 / batch 196608 / kv2` | Reallocate width into more layers | The best use of budget may be deeper but thinner blocks | Whether more transformations beat block-internal width |
+| `B1-E4` | `9L / MLP3 / batch 196608 / kv2` | Reallocate depth into more width | Some capacity may be better spent inside each block than on one extra layer | Whether width can replace a layer cleanly |
+| `B1-E5` | `9L / MLP3 / batch 131072 / kv2` | Test width with step recovery | Width may also need more optimizer steps, just like depth did | Whether a width loss is fundamental or just another fixed-budget step problem |
 
 **Decision rule for B1**
 
-- if `B1-E3` and `B1-E4` are both clearly worse than the anchor, width is probably not the next place to spend capacity
-- if `B1-E2` wins or stays close, the model may still be under-layered relative to its MLP size
-- if `B1-E3` or `B1-E5` wins, the next tranche should become width-aware rather than purely depth-aware
+- if `B1-E1` beats the anchor, the current MLP is likely too wide
+- if `B1-E2` beats the anchor, pure width deserves a larger follow-up tranche
+- if `B1-E3` wins, the model is probably under-layered relative to its MLP size
+- if `B1-E4` or `B1-E5` wins, the next tranche should become width-aware rather than purely depth-aware
