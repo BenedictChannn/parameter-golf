@@ -70,6 +70,8 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - in small models, MLPs can dominate parameter count quickly; more transformations may be a better use of budget than fatter hidden layers
 - Status: active
 - Related tranche: [`T-20260329-B`](./tranches.md#t-20260329-b---architecture-necessity-audit)
+- Evidence so far:
+- [`AL-20260329-006`](./experiments.tsv) says `10L / MLP1` alone is not enough; thinner blocks gained steps and headroom but still lost on `val_bpb`
 
 ### I-20260329-008 - Residual Controls And Skip Paths Are Overbuilt
 

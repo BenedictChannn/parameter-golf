@@ -24,6 +24,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Smaller batches recovered enough optimizer steps to turn the `10`-layer branch from a loser into the current winner.
 - The frontier is flattening: `196608` and `131072` batch settings are very close.
 - Cheaper attention via `NUM_KV_HEADS=1` was not a better trade than keeping `NUM_KV_HEADS=2`.
+- At fixed `10`-layer depth, shrinking the MLP to `MLP_MULT=1` bought steps and artifact headroom, but not enough quality to beat the `MLP_MULT=2` anchor.
 
 ## Open Questions
 
@@ -33,7 +34,6 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Next Planned Runs
 
-- `B1-E1`: test `10L / MLP1 / 196608 / kv2` to ask whether the current MLP is too wide.
 - `B1-E2`: test `10L / MLP3 / 196608 / kv2` to ask whether pure width helps at fixed depth.
 - `B1-E3`: test `11L / MLP1 / 196608 / kv2` to trade width for one more layer.
 - `B1-E4`: test `9L / MLP3 / 196608 / kv2` to trade one layer for more width.
