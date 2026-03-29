@@ -142,6 +142,7 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - Evidence so far:
 - [`AL-20260329-021`](./experiments.tsv) says the frontier does respond to attention geometry; `q4/kv2` is better than the previous `q8/kv2` winner
 - [`AL-20260329-022`](./experiments.tsv) says the direction is specifically toward fewer wider heads, not toward more narrower ones
+- [`AL-20260329-023`](./experiments.tsv) says less KV sharing helps some, but not enough to beat the wider-head direction
 
 ## Parked
 
