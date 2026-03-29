@@ -309,7 +309,7 @@ Is the new valid winner still step-limited or slightly under-tuned, and can the 
 
 ## T-20260329-E: Attention Geometry Audit
 
-**Status:** planned next
+**Status:** completed
 
 **Goal**  
 Use the new frontier, [`AL-20260329-016`](./experiments.tsv), as the base model and ask whether the next gain comes from attention geometry rather than more optimizer fiddling.
@@ -365,6 +365,7 @@ Is the current `9L / MLP2 / 98304 / q8-kv2 / QK_GAIN_INIT=1.5` setup the right a
 - [`AL-20260329-022`](./experiments.tsv) (`E2`, `q16/kv2`) landed at `1.3968` and 14.40 MB. This is a clear regression and says the E1 win was directional evidence for wider heads, not a generic reward for changing head count.
 - [`AL-20260329-023`](./experiments.tsv) (`E3`, `q8/kv4`) landed at `1.3766` and 15.31 MB. This is respectable and better than the old `q8/kv2` anchor, but it still does not overtake `q4/kv2`.
 - [`AL-20260329-024`](./experiments.tsv) (`E4`, `QK_GAIN_INIT=1.0`) landed at `1.3777` and 15.45 MB. Competitive, but still clearly behind `q4/kv2`.
+- [`AL-20260329-025`](./experiments.tsv) (`E5`, `QK_GAIN_INIT=2.0`) landed at `1.3743` and 15.48 MB. Better than the softer bracket, but still not enough to beat `q4/kv2`.
 
 **Current reading**
 
@@ -372,4 +373,11 @@ Is the current `9L / MLP2 / 98304 / q8-kv2 / QK_GAIN_INIT=1.5` setup the right a
 - the model appears to prefer fewer, wider query heads rather than more, narrower ones
 - less KV sharing helps some, but not enough to beat the wider-head direction
 - softer QK init is not enough to beat the wider-head direction
-- the final tranche-E run only needs to answer whether sharper QK init is better or worse than the current baseline
+- sharper QK init is better than softer QK init, but still secondary to the head-geometry win
+
+**Outcome**
+
+- best result from this tranche: [`AL-20260329-021`](./experiments.tsv) at `1.3709`
+- main conclusion: attention geometry is a real frontier lever, and the strongest gain in this tranche came from fewer, wider query heads (`q4/kv2`)
+- secondary conclusion: less KV sharing and QK-gain tuning can help somewhat, but neither beat the `q4/kv2` change
+- next pivot: use `9L / MLP2 / 98304 / q4-kv2` as the new anchor and test output-path or residual-control simplification next

@@ -24,7 +24,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 - Tranche: [`T-20260329-E`](./tranches.md#t-20260329-e-attention-geometry-audit)
 - Goal: test whether the new `9L / MLP2 / 98304` frontier is now limited more by attention geometry than by the already-mapped MLP or optimizer knobs
-- Status: planned next
+- Status: completed
 
 ## Working Beliefs
 
@@ -54,12 +54,13 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - The opposite head-direction failed hard. `q16/kv2` regressed badly, which means the E1 result is directional evidence, not a generic “head changes help” result.
 - Reducing KV sharing is not the main win. `q8/kv4` improved on the old `q8/kv2` line, but it still fell short of `q4/kv2`.
 - Softer QK init is not the main win either. `QK_GAIN_INIT=1.0` stayed competitive, but it still did not beat the wider-head direction.
+- Sharper QK init also stayed secondary. `QK_GAIN_INIT=2.0` beat the softer bracket, but neither QK-gain change beat the `q4/kv2` head-geometry win.
 
 ## Open Questions
 
 - Is the new frontier now limited more by attention geometry than by feedforward capacity or optimizer choice?
 - Does the model clearly want fewer wider query heads, or is `q4` just one side of a broader head-geometry optimum?
-- Is the current `QK_GAIN_INIT=1.5` making attention too sharp or too flat for the `98304`-token regime?
+- Which component family is the next best pivot now that width, step count, and first-pass attention geometry are better mapped?
 
 ## Next Planned Runs
 
@@ -76,7 +77,10 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - `E2`: `NUM_HEADS=16, NUM_KV_HEADS=2` -> complete, clear regression
 - `E3`: `NUM_HEADS=8, NUM_KV_HEADS=4` -> complete, better than old `q8/kv2`, but still behind `q4/kv2`
 - `E4`: `QK_GAIN_INIT=1.0` -> complete, respectable but not a winner
-- `E5`: `QK_GAIN_INIT=2.0`
+- `E5`: `QK_GAIN_INIT=2.0` -> complete, best QK-gain bracket but still not a winner
+- Tranche-E takeaway:
+- the best attention change in this set was `q4/kv2`
+- the next tranche should probably move to output-path or residual-control simplification, using `q4/kv2` as the new anchor
 
 ## Go Deeper
 

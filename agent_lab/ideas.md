@@ -144,6 +144,7 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - [`AL-20260329-022`](./experiments.tsv) says the direction is specifically toward fewer wider heads, not toward more narrower ones
 - [`AL-20260329-023`](./experiments.tsv) says less KV sharing helps some, but not enough to beat the wider-head direction
 - [`AL-20260329-024`](./experiments.tsv) says softer QK init is competitive but still secondary to the head-geometry win
+- [`AL-20260329-025`](./experiments.tsv) says sharper QK init is the better side of the bracket, but the head-geometry win is still the dominant signal
 
 ## Parked
 
