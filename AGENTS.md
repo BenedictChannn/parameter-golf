@@ -39,10 +39,26 @@ Every tranche should teach something. A run that does not improve `val_bpb` can 
 
 For autonomous agent-lab work:
 
-- edit `[agent_lab/train_gpt.py](./agent_lab/train_gpt.py)`
+- use env vars for pure hyperparameter, schedule, and runtime sweeps
+- edit `[agent_lab/train_gpt.py](./agent_lab/train_gpt.py)` only when testing a real code-path, architecture, optimizer, evaluation, or compression change
 - do not edit `[train_gpt.py](./train_gpt.py)` unless the human explicitly wants the shared baseline changed
 - maintain `[agent_lab/experiments.tsv](./agent_lab/experiments.tsv)`
+- maintain `[agent_lab/state.md](./agent_lab/state.md)` as the first-read dashboard
+- maintain `[agent_lab/tranches.md](./agent_lab/tranches.md)` as the research-program map
+- maintain `[agent_lab/ideas.md](./agent_lab/ideas.md)` as the hypothesis bank
 - update the active dated log in `[docs/build-logs/](./docs/build-logs/)`
+
+## Memory Model
+
+Use the research memory system as a dashboard plus drill-down chain:
+
+- [`agent_lab/state.md`](./agent_lab/state.md) answers what is true right now, what matters, and what is next
+- [`agent_lab/tranches.md`](./agent_lab/tranches.md) answers why the current family of experiments exists and when to pivot
+- [`agent_lab/ideas.md`](./agent_lab/ideas.md) answers which hypotheses are active, parked, or waiting for evidence
+- [`agent_lab/experiments.tsv`](./agent_lab/experiments.tsv) answers what exact runs happened
+- [`docs/build-logs/`](./docs/build-logs/) contains the long-form reasoning, surprises, and evidence trail
+
+Keep the summary surfaces short and linked outward. Do not bury the control state inside a single long build log.
 
 ## Primary Metric
 
@@ -81,6 +97,7 @@ Do not violate these:
 After meaningful work:
 
 - append the experiment registry
+- update the high-level state, tranche, and idea surfaces
 - record the outcome, including negative results
 - update the dated build log with what changed, what was tested, what happened, and what to do next
 
@@ -109,6 +126,8 @@ Before autonomous work, read:
 1. `[README.md](./README.md)`
 2. `[agent_lab/README.md](./agent_lab/README.md)`
 3. `[agent_lab/program.md](./agent_lab/program.md)`
-4. `[agent_lab/experiments.tsv](./agent_lab/experiments.tsv)`
-5. `[.cursor/rules/parameter-golf.mdc](./.cursor/rules/parameter-golf.mdc)`
-
+4. `[agent_lab/state.md](./agent_lab/state.md)`
+5. `[agent_lab/tranches.md](./agent_lab/tranches.md)`
+6. `[agent_lab/ideas.md](./agent_lab/ideas.md)`
+7. `[agent_lab/experiments.tsv](./agent_lab/experiments.tsv)`
+8. `[.cursor/rules/parameter-golf.mdc](./.cursor/rules/parameter-golf.mdc)`
