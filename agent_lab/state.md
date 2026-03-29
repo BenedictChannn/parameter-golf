@@ -44,11 +44,12 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Dropping one layer is not the cleaner size move here. `8L / MLP3 / 131072` kept decent quality, but it was still over the cap, so the layer cut saved fewer useful bytes than the MLP-notch cut.
 - The best fallback after the winner is the combined-light-cuts line, `8L / MLP3 / DIM480 / 131072`. It is valid and stronger than the other fallback trims, but it still sits well behind `9L / MLP2 / 131072`.
 - The winner was still substantially step-limited. Dropping batch to `98304` on `9L / MLP2` was a major gain, not a marginal one, and it still stayed inside the artifact cap.
+- A simple LR bump is not interchangeable with extra steps. `MATRIX_LR=0.065` at `131072` batch fell back to the old frontier band instead of following the `98304` win.
 
 ## Open Questions
 
 - Is `9L / MLP2 / 131072` already the right frontier shape, or can another structural trim beat it?
-- Does the new frontier `9L / MLP2 / 98304` want a small LR retune on top of the extra steps, or is step recovery already most of the win?
+- Does the new frontier `9L / MLP2 / 98304` want a small LR retune on top of the extra steps, or was step recovery already most of the accessible gain?
 - Is the backup `8L / MLP3 / DIM480 / 131072` merely smaller, or can optimization make it genuinely competitive?
 - Which of those two survivors deserves to anchor the next architecture tranche after optimization is explored?
 
@@ -63,7 +64,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
   can optimization improve the two actual survivors, especially the new `9L / MLP2` winner?
 - Planned tranche-D runs:
 - `D1-E1`: `9L / MLP2 / 512 / 98304 / kv2` -> complete, new frontier at `1.3721`
-- `D1-E2`: `9L / MLP2 / 512 / 131072 / kv2 / MATRIX_LR=0.065`
+- `D1-E2`: `9L / MLP2 / 512 / 131072 / kv2 / MATRIX_LR=0.065` -> complete, clear regression
 - `D1-E3`: `9L / MLP2 / 512 / 98304 / kv2 / MATRIX_LR=0.065`
 - `D1-E4`: `8L / MLP3 / DIM480 / 98304 / kv2`
 - `D1-E5`: `8L / MLP3 / DIM480 / 98304 / kv2 / MATRIX_LR=0.065`
