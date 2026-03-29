@@ -47,6 +47,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - A simple LR bump is not interchangeable with extra steps. `MATRIX_LR=0.065` at `131072` batch fell back to the old frontier band instead of following the `98304` win.
 - The combo test also failed to beat the step-only win. `98304 + MATRIX_LR=0.065` stayed strong, but it still lost clearly to `98304` with the default LR.
 - The fallback line is also step-limited. `8L / MLP3 / DIM480 / 98304` improved a lot over its `131072` version, but it still remains secondary to the `9L / MLP2 / 98304` frontier.
+- The LR bump helps neither survivor. It regressed both the main line and the fallback line, so the current best-tested setting keeps the default `MATRIX_LR=0.06`.
 
 ## Open Questions
 
@@ -69,7 +70,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - `D1-E2`: `9L / MLP2 / 512 / 131072 / kv2 / MATRIX_LR=0.065` -> complete, clear regression
 - `D1-E3`: `9L / MLP2 / 512 / 98304 / kv2 / MATRIX_LR=0.065` -> complete, still worse than step-only
 - `D1-E4`: `8L / MLP3 / DIM480 / 98304 / kv2` -> complete, improved backup but still behind the frontier
-- `D1-E5`: `8L / MLP3 / DIM480 / 98304 / kv2 / MATRIX_LR=0.065`
+- `D1-E5`: `8L / MLP3 / DIM480 / 98304 / kv2 / MATRIX_LR=0.065` -> complete, also worse than step-only
 
 ## Go Deeper
 

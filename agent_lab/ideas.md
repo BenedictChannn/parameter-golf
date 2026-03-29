@@ -67,6 +67,7 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - [`AL-20260329-017`](./experiments.tsv) shows a simple LR bump at the old batch is not the answer; any remaining optimizer gain likely has to be evaluated on top of the `98304` line, not instead of it
 - [`AL-20260329-018`](./experiments.tsv) shows the `98304` winner also does not want this simple LR bump, so the default LR is currently the best setting among the tested options
 - [`AL-20260329-019`](./experiments.tsv) shows the fallback line was also under-trained, but even after step recovery it still remains behind the main frontier
+- [`AL-20260329-020`](./experiments.tsv) closes the loop: the fallback line also rejects the LR bump, so the optimizer lesson from tranche D is consistent across both survivors
 
 ### I-20260329-004 - Schedule or Optimizer Retune For 10L
 
