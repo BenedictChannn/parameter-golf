@@ -109,7 +109,8 @@ Branch: `agent_lab/<tag>` or `agent_lab/<tag>-gpu0`.
 6. Empty primary line → likely crash → `tail -n 80 agent_lab/run.log`; fix trivial errors or log `crash` and revert.
 7. Append TSV row.
 8. Update `state.md`, `tranches.md`, and `ideas.md` so the high-level research view stays synchronized with the exact run ledger.
-9. Better `val_bpb` or a clearly informative result → keep the branch history and log the lesson. Revert only when the change does not deserve to stay as part of the tree.
+9. Regenerate the visual dashboard with `python3 scripts/agent_lab/plot_experiments.py` when the ledger changes.
+10. Better `val_bpb` or a clearly informative result → keep the branch history and log the lesson. Revert only when the change does not deserve to stay as part of the tree.
 
 **Timeout:** if wall time ≫ **2×** `MAX_WALLCLOCK_SECONDS` + eval slack (e.g. >25 min at 600s cap), kill → discard, revert.
 

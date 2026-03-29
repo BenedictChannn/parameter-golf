@@ -32,7 +32,14 @@ Design is inspired by [karpathy/autoresearch](https://github.com/karpathy/autore
    - [`state.md`](state.md) for the short dashboard
    - [`tranches.md`](tranches.md) for the research-program map
    - [`ideas.md`](ideas.md) for the hypothesis bank
+   - [`architecture_review.md`](architecture_review.md) for the component-by-component model audit
    These are the fast-orientation surfaces. Use them to summarize what is true, then link outward to `experiments.tsv` and the dated build log for details.
+
+7. **Visual aid:** regenerate the experiment dashboard after new runs:
+   ```bash
+   python3 scripts/agent_lab/plot_experiments.py
+   ```
+   This writes `agent_lab/plots/experiments.svg` and `agent_lab/plots/experiments.html`.
 
 ## What lives here
 
@@ -44,8 +51,11 @@ Design is inspired by [karpathy/autoresearch](https://github.com/karpathy/autore
 | `state.md` | **Short dashboard** — current best, active tranche, working beliefs, and next planned runs. |
 | `tranches.md` | **Research-program map** — tranche goals, controls, findings, and pivot rules. |
 | `ideas.md` | **Hypothesis bank** — active, new, parked, and revisit-later ideas with links back to evidence. |
+| `architecture_review.md` | **Component audit** — the architecture broken into parts, with explicit “is this needed?” questions and candidate levers. |
+| `plots/experiments.svg` | **Visual dashboard** — current experiment frontier, running best, steps, and artifact tradeoffs. |
 | [`.cursor/skills/agent-lab/SKILL.md`](../.cursor/skills/agent-lab/SKILL.md) | **Commit conventions**, metric line meanings, official time limits, interaction effects, build-log voice. |
 | [`scripts/agent_lab/run_exp.sh`](../scripts/agent_lab/run_exp.sh) | Default env + `torchrun` from repo root (optional). |
+| [`scripts/agent_lab/plot_experiments.py`](../scripts/agent_lab/plot_experiments.py) | Zero-dependency renderer for the experiment dashboard. |
 
 `results.tsv` and `run.log` are gitignored; create them per `program.md`.
 

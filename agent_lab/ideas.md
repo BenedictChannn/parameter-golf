@@ -53,6 +53,33 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - Status: new
 - Related tranche: none yet
 
+### I-20260329-007 - MLP Width Versus Depth
+
+- Category: architecture
+- Hypothesis: moving some capacity budget from depth into MLP width could improve quality or compression efficiency more cleanly than another depth push.
+- Why it might work:
+- the current frontier suggests depth helps, but we have not yet asked whether `MLP_MULT` is the better place to spend parameters
+- Status: new
+- Related tranche: none yet
+
+### I-20260329-008 - Residual Controls And Skip Paths Are Overbuilt
+
+- Category: architecture
+- Hypothesis: some of `resid_mix`, `attn_scale`, `mlp_scale`, or `skip_weights` may be unnecessary or overly expensive in complexity relative to the quality they add.
+- Why it might work:
+- these controls are distinctive to this script and may be carrying historical baggage rather than current necessity
+- Status: new
+- Related tranche: none yet
+
+### I-20260329-009 - Output Path Is Mismatched To The 10-Layer Regime
+
+- Category: architecture
+- Hypothesis: the current tying, initialization, or logit softcap choices may be leaving quality on the table now that the model is deeper and better trained.
+- Why it might work:
+- output-path choices affect both optimization behavior and compression cost, but have not been tested in the current frontier
+- Status: new
+- Related tranche: none yet
+
 ## Parked
 
 ### I-20260329-006 - KV1 As The Main Frontier Lever

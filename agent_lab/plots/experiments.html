@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Agent Lab Experiment Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      margin: 0;
+      background: #f3f0e8;
+      color: #1f2937;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+    p {
+      margin: 0 0 16px;
+      line-height: 1.5;
+    }
+    .frame {
+      background: white;
+      border: 1px solid #d6d3d1;
+      border-radius: 18px;
+      overflow: hidden;
+    }
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Agent Lab Experiment Dashboard</h1>
+    <p>This dashboard is generated from <code>agent_lab/experiments.tsv</code>. Re-run
+    <code>python3 scripts/agent_lab/plot_experiments.py</code> after logging new experiments.</p>
+    <div class="frame">
+      <img src="experiments.svg" alt="Experiment dashboard">
+    </div>
+  </main>
+</body>
+</html>

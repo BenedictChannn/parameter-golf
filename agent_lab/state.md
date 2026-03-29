@@ -36,10 +36,13 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Decide whether to confirm the `131072` vs `196608` difference with a focused replay or treat it as effectively tied.
 - Start a sharper next tranche instead of continuing blind local search.
 - Favor mechanisms that improve the `10`-layer branch without pushing size closer to the cap.
+- Use the architecture audit in [`architecture_review.md`](./architecture_review.md) to turn “is this really needed?” into explicit component-level hypotheses.
 
 ## Go Deeper
 
 - Tranche map: [`tranches.md`](./tranches.md)
 - Idea bank: [`ideas.md`](./ideas.md)
+- Architecture audit: [`architecture_review.md`](./architecture_review.md)
+- Experiment dashboard: [`plots/experiments.html`](./plots/experiments.html)
 - Experiment ledger: [`experiments.tsv`](./experiments.tsv)
 - Latest narrative log: [`docs/build-logs/2026-03-29-agent-lab.md`](../docs/build-logs/2026-03-29-agent-lab.md)

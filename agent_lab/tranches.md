@@ -58,3 +58,24 @@ This file is the high-level research-program map. Each tranche should have a rea
 - move from “buy more steps” to “free useful capacity or improve optimization without adding much more batch noise.”
 - Deeper notes:
 - [`docs/build-logs/2026-03-29-agent-lab.md`](../docs/build-logs/2026-03-29-agent-lab.md)
+
+## T-20260329-B - Architecture Necessity Audit
+
+- Status: planned
+- Goal: break the model into major components and ask, one family at a time, whether each piece is actually earning its bytes, compute, and optimization complexity.
+- Main question:
+- after the first capacity frontier is partly mapped, is the next gain more likely to come from a better distribution of capacity or from simplifying/removing overbuilt structure?
+- Fixed controls:
+- one training shard
+- `600s` training cap
+- primary metric `final_int8_ttt_lora`
+- tokenizer and validation semantics unchanged
+- Planned investigation families:
+- MLP width versus depth
+- residual controls and skip topology
+- output path choices such as tying and logit softcap
+- compression-aware architectural tradeoffs
+- Working surface:
+- [`architecture_review.md`](./architecture_review.md)
+- Planned pivot rule:
+- if a family shows only noise-level differences after 2-3 runs, move to the next component instead of overfitting one local knob

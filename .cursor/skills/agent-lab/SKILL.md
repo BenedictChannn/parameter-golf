@@ -20,24 +20,28 @@ Work like a scientist, not only a tuner.
 
 1. Read **`agent_lab/program.md`** (hard constraints).
 2. Read **`agent_lab/state.md`**, **`agent_lab/tranches.md`**, and **`agent_lab/ideas.md`** when they exist.
-3. Read **`agent_lab/experiments.tsv`** — what was tried, verdicts, best commit so far.
-4. Read **`.cursor/rules/parameter-golf.mdc`** (challenge guardrails).
-5. Decide whether the hypothesis is env-only or requires a real code change. Prefer env vars for pure hparam, schedule, and runtime sweeps.
+3. Read **`agent_lab/architecture_review.md`** when the next tranche is architecture-facing.
+4. Read **`agent_lab/experiments.tsv`** — what was tried, verdicts, best commit so far.
+5. Read **`.cursor/rules/parameter-golf.mdc`** (challenge guardrails).
+6. Decide whether the hypothesis is env-only or requires a real code change. Prefer env vars for pure hparam, schedule, and runtime sweeps.
 
 ## After each full training run
 
 1. Append **`agent_lab/results.tsv`** (gitignored loop log) if you use it — columns per `program.md`.
 2. Append **`agent_lab/experiments.tsv`** (tracked) with stable **`AL-YYYYMMDD-NNN`** id, parent commit, hypothesis, **verdict** (`correct` / `wrong` / `partial` / `n_a`), metric, `val_bpb`, notes.
 3. Update **`agent_lab/state.md`**, **`agent_lab/tranches.md`**, and **`agent_lab/ideas.md`** so the high-level research memory stays current.
-4. Commit with **`feat(agent-lab):`** or **`docs(agent-lab):`** and **rich body** (see **Commit conventions** below).
-5. Update **`docs/build-logs/<date>-agent-lab.md`** — journal entry in a **human voice** (see **Build log voice** below).
+4. Regenerate **`agent_lab/plots/experiments.svg`** and **`agent_lab/plots/experiments.html`** with `python3 scripts/agent_lab/plot_experiments.py`.
+5. Commit with **`feat(agent-lab):`** or **`docs(agent-lab):`** and **rich body** (see **Commit conventions** below).
+6. Update **`docs/build-logs/<date>-agent-lab.md`** — journal entry in a **human voice** (see **Build log voice** below).
 
 ## Dashboard plus drill-down
 
 - **`state.md`** is the first-read dashboard: current best, active tranche, working beliefs, next runs.
 - **`tranches.md`** is the tranche map: why this family of runs exists, what is fixed, and when to pivot.
 - **`ideas.md`** is the hypothesis bank: what is active, parked, or waiting for evidence.
+- **`architecture_review.md`** is the component audit: embeddings, attention, MLP, skips, optimizer partition, compression, and TTT.
 - **`experiments.tsv`** is the exact ledger.
+- **`agent_lab/plots/experiments.*`** is the fast visual summary.
 - **`docs/build-logs/*`** is the long-form reasoning trail.
 
 Keep the short surfaces concise and linked. Do not force a later session to reconstruct the lab state from one giant prose log.
