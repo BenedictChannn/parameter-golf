@@ -285,13 +285,15 @@ Is the new valid winner still step-limited or slightly under-tuned, and can the 
 - [`AL-20260329-016`](./experiments.tsv) (`D1-E1`, `9L / MLP2 / 98304 / kv2`) landed at `1.3721` and 15.48 MB. This is a major frontier jump and strongly confirms that the tranche-C winner was still step-limited.
 - [`AL-20260329-017`](./experiments.tsv) (`D1-E2`, `9L / MLP2 / 131072 / kv2 / MATRIX_LR=0.065`) landed at `1.3909` and 14.92 MB. This is a clear regression and says the big gain did not come from a simple LR mismatch at the old batch size.
 - [`AL-20260329-018`](./experiments.tsv) (`D1-E3`, `9L / MLP2 / 98304 / kv2 / MATRIX_LR=0.065`) landed at `1.3786` and 15.55 MB. Still strong, but worse than `98304` alone, so the step win does not want this LR bump on top.
+- [`AL-20260329-019`](./experiments.tsv) (`D1-E4`, `8L / MLP3 / DIM480 / 98304 / kv2`) landed at `1.3808` and 15.19 MB. This is a real rescue of the fallback line, but it still does not overtake the main `9L / MLP2 / 98304` frontier.
 
 **Current reading**
 
 - extra steps matter more than we thought on the `9L / MLP2` line
 - LR alone does not rescue the old-batch line
 - the `98304` winner also does not improve with this LR bump
-- the remaining value in tranche D is now mostly about whether the smaller fallback line can be rescued at all
+- the fallback line can be rescued somewhat with more steps, but it is still the backup, not the main frontier
+- the last remaining question is whether the fallback wants the LR bump that the main line rejected
 
 **Decision rule for D**
 
