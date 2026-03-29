@@ -130,6 +130,16 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - Status: new
 - Related tranche: none yet
 
+### I-20260329-013 - The Frontier Is Now Attention-Limited
+
+- Category: attention
+- Hypothesis: after tranche C fixed width allocation and tranche D fixed step count, the next meaningful gain may come from changing attention geometry rather than from more optimizer nudging.
+- Why it might work:
+- the current best line is stable on shape and optimization, but we have barely explored attention geometry beyond `kv1` versus `kv2`
+- `NUM_HEADS`, `NUM_KV_HEADS`, and `QK_GAIN_INIT` are already exposed and can test this family cheaply and honestly
+- Status: active
+- Related tranche: [`T-20260329-E`](./tranches.md#t-20260329-e-attention-geometry-audit)
+
 ## Parked
 
 ### I-20260329-006 - KV1 As The Main Frontier Lever

@@ -4,7 +4,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Current Best Valid
 
-- Experiment: [`AL-20260329-012`](./experiments.tsv)
+- Experiment: [`AL-20260329-016`](./experiments.tsv)
 - Commit: `22581b4`
 - Primary metric: `final_int8_ttt_lora`
 - Best `val_bpb`: `1.3721`
@@ -22,9 +22,9 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Active Tranche
 
-- Tranche: [`T-20260329-C`](./tranches.md#t-20260329-c-width-winner-size-recovery)
-- Goal: finish the size-recovery sweep around the width-biased near-miss and identify the best valid survivor for tranche D
-- Status: active
+- Tranche: [`T-20260329-E`](./tranches.md#t-20260329-e-attention-geometry-audit)
+- Goal: test whether the new `9L / MLP2 / 98304` frontier is now limited more by attention geometry than by the already-mapped MLP or optimizer knobs
+- Status: planned next
 
 ## Working Beliefs
 
@@ -48,29 +48,31 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - The combo test also failed to beat the step-only win. `98304 + MATRIX_LR=0.065` stayed strong, but it still lost clearly to `98304` with the default LR.
 - The fallback line is also step-limited. `8L / MLP3 / DIM480 / 98304` improved a lot over its `131072` version, but it still remains secondary to the `9L / MLP2 / 98304` frontier.
 - The LR bump helps neither survivor. It regressed both the main line and the fallback line, so the current best-tested setting keeps the default `MATRIX_LR=0.06`.
+- The next good question is no longer optimization. The best line is now stable enough that another worthwhile tranche should attack a different component family.
+- Attention is the cleanest next component family because it has several env-exposed geometry knobs: query-head count, KV sharing, and QK sharpness at initialization.
 
 ## Open Questions
 
-- Is `9L / MLP2 / 131072` already the right frontier shape, or can another structural trim beat it?
-- Does the new frontier `9L / MLP2 / 98304` want a small LR retune on top of the extra steps, or was step recovery already most of the accessible gain?
-- Is the backup `8L / MLP3 / DIM480 / 98304` good enough to matter, or does its remaining gap mean the main line is simply better?
-- Which of those two survivors deserves to anchor the next architecture tranche after optimization is explored?
+- Is the new frontier now limited more by attention geometry than by feedforward capacity or optimizer choice?
+- Does the model want fewer wider query heads, more narrower query heads, or less aggressive KV sharing?
+- Is the current `QK_GAIN_INIT=1.5` making attention too sharp or too flat for the `98304`-token regime?
 
 ## Next Planned Runs
 
-- Tranche C is complete.
-- Best survivor:
-- `9L / MLP2 / 512 / 131072 / kv2` -> former structural winner from tranche C
-- Best fallback:
-- `8L / MLP3 / DIM480 / 131072 / kv2` -> `1.3906`, valid, smaller but clearly weaker
-- Tranche D now asks:
-  can optimization improve the two actual survivors, especially the new `9L / MLP2` winner?
-- Planned tranche-D runs:
-- `D1-E1`: `9L / MLP2 / 512 / 98304 / kv2` -> complete, new frontier at `1.3721`
-- `D1-E2`: `9L / MLP2 / 512 / 131072 / kv2 / MATRIX_LR=0.065` -> complete, clear regression
-- `D1-E3`: `9L / MLP2 / 512 / 98304 / kv2 / MATRIX_LR=0.065` -> complete, still worse than step-only
-- `D1-E4`: `8L / MLP3 / DIM480 / 98304 / kv2` -> complete, improved backup but still behind the frontier
-- `D1-E5`: `8L / MLP3 / DIM480 / 98304 / kv2 / MATRIX_LR=0.065` -> complete, also worse than step-only
+- Tranche C taught us:
+- the right byte-saving move was `MLP3 -> MLP2`, not a dim trim or a layer cut
+- Tranche D taught us:
+- the winning `9L / MLP2` line was still step-limited at `131072`
+- more steps helped both survivors
+- the `MATRIX_LR=0.065` bump helped neither
+- Tranche E now asks:
+  is the current `9L / MLP2 / 98304 / q8-kv2` frontier leaving quality on the table because its attention geometry is mis-set?
+- Planned tranche-E runs:
+- `E1`: `NUM_HEADS=4, NUM_KV_HEADS=2`
+- `E2`: `NUM_HEADS=16, NUM_KV_HEADS=2`
+- `E3`: `NUM_HEADS=8, NUM_KV_HEADS=4`
+- `E4`: `QK_GAIN_INIT=1.0`
+- `E5`: `QK_GAIN_INIT=2.0`
 
 ## Go Deeper
 

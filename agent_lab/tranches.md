@@ -306,3 +306,55 @@ Is the new valid winner still step-limited or slightly under-tuned, and can the 
 
 - if one of the optimized slim candidates beats [`AL-20260329-004`](./experiments.tsv) while staying under the cap, it becomes the new valid frontier
 - if optimization does not recover the slimmer candidates, the next tranche should pivot from width rescue toward compression-aware structural changes outside the width family
+
+## T-20260329-E: Attention Geometry Audit
+
+**Status:** planned next
+
+**Goal**  
+Use the new frontier, [`AL-20260329-016`](./experiments.tsv), as the base model and ask whether the next gain comes from attention geometry rather than more optimizer fiddling.
+
+**Main question**  
+Is the current `9L / MLP2 / 98304 / q8-kv2 / QK_GAIN_INIT=1.5` setup the right attention shape, or is the frontier now limited by head geometry and attention sharpness?
+
+**Why this tranche exists**
+
+- tranche C already solved the main width-vs-size allocation question
+- tranche D already solved the immediate optimization question
+- the next compute-worthy pivot should target a different component family
+- attention is the cleanest next family because several relevant knobs are already env-exposed and can be tested without speculative code edits
+
+**Base controls**
+
+- anchor shape: `9L / MLP2 / MODEL_DIM=512 / TRAIN_BATCH_TOKENS=98304`
+- keep `MAX_WALLCLOCK_SECONDS=600`
+- keep primary metric `final_int8_ttt_lora`
+- keep tied embeddings and tokenizer/validation semantics unchanged
+- keep default optimizer settings from the current winner unless the experiment explicitly changes them
+
+**Anchor**
+
+- [`AL-20260329-016`](./experiments.tsv) at `1.3721`, 15.48 MB
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | What it teaches |
+|---|---|---|---|---|
+| `E1` | `NUM_HEADS=4, NUM_KV_HEADS=2` | Test fewer, wider query heads | The current frontier may be over-fragmenting attention; wider heads could improve a small model's attention quality | Whether the model wants fewer, wider attention heads |
+| `E2` | `NUM_HEADS=16, NUM_KV_HEADS=2` | Test more, narrower query heads | The current frontier may be under-headed; more heads could improve routing diversity | Whether the model wants more attention subspaces even at smaller head_dim |
+| `E3` | `NUM_HEADS=8, NUM_KV_HEADS=4` | Reduce KV sharing | `kv2` may now be too aggressive on the stronger frontier; giving queries more distinct keys/values may help quality enough to justify the cost | Whether the main line is limited by over-shared KV projections |
+| `E4` | `QK_GAIN_INIT=1.0` | Test flatter attention sharpness at init | The current `1.5` gain may make attention too sharp early in training on the step-rich frontier | Whether softer initial attention improves learning dynamics |
+| `E5` | `QK_GAIN_INIT=2.0` | Test sharper attention at init | The current `1.5` gain may be too conservative and a stronger signal could help the model focus faster | Whether more aggressive initial attention helps the same frontier |
+
+**Why these five are worth the compute**
+
+- `E1` and `E2` bracket query-head geometry without changing model size dramatically
+- `E3` directly tests whether the current `kv2` choice is now the bottleneck rather than the solution
+- `E4` and `E5` bracket attention sharpness around the existing setting, so we learn whether the current init is too flat, too sharp, or already near the right point
+
+**Decision rule for E**
+
+- if `E1` or `E2` wins, the next tranche should keep the new head geometry fixed and probe neighboring attention settings
+- if `E3` wins, the new frontier may have outgrown `kv2`, and future capacity planning should treat KV sharing as a first-class tradeoff again
+- if `E4` or `E5` wins, attention sharpness was mis-set and we should tune around the winning side rather than touching architecture broadly
+- if none win clearly, attention geometry is probably not the next bottleneck and the next tranche should pivot to output-path or residual-control simplification
