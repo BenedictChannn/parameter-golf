@@ -158,6 +158,7 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - Related tranche: [`T-20260329-F`](./tranches.md#t-20260329-f-output-path-audit)
 - Evidence so far:
 - [`AL-20260329-026`](./experiments.tsv) says output expressivity is a first-class lever; untied outputs produced a large frontier jump without breaking the size cap
+- [`AL-20260329-027`](./experiments.tsv) says output calibration matters on top of that; tighter logit clipping improved the untied frontier again
 
 ## Parked
 
