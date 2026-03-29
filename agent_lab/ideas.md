@@ -45,6 +45,9 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - the raw winner is only strong after the width-plus-step interaction clicks, so the safest next move is to shave bytes around that shape instead of abandoning it
 - Status: active
 - Related tranche: [`T-20260329-C`](./tranches.md#t-20260329-c-width-winner-size-recovery)
+- Evidence so far:
+- [`AL-20260329-011`](./experiments.tsv) says a mild global dim trim fixes size but gives back too much score
+- [`AL-20260329-012`](./experiments.tsv) says a one-notch MLP trim is a much cleaner byte cut; it produced the new best valid frontier at `1.3838`
 
 ### I-20260329-012 - Smaller Valid Width Models Need Different Training Dynamics
 
@@ -54,6 +57,8 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - B1 already showed a strong interaction between architecture and step count
 - Status: active
 - Related tranche: [`T-20260329-D`](./tranches.md#t-20260329-d-slim-winner-optimization-recovery)
+- Evidence so far:
+- [`AL-20260329-012`](./experiments.tsv) shows one size-recovered width-oriented survivor is already strong enough to deserve direct optimization follow-ups instead of more blind structural cuts
 
 ### I-20260329-004 - Schedule or Optimizer Retune For 10L
 

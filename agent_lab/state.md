@@ -4,27 +4,27 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Current Best Valid
 
-- Experiment: [`AL-20260329-004`](./experiments.tsv)
-- Commit: `41e9478`
+- Experiment: [`AL-20260329-012`](./experiments.tsv)
+- Commit: `d99bcaa`
 - Primary metric: `final_int8_ttt_lora`
-- Best `val_bpb`: `1.3913`
-- Winning branch shape: `10` layers, `NUM_KV_HEADS=2`, `TRAIN_BATCH_TOKENS=131072`
-- Total artifact size: `15,824,353` bytes int8+zlib
+- Best `val_bpb`: `1.3838`
+- Winning branch shape: `9` layers, `MLP_MULT=2`, `MODEL_DIM=512`, `NUM_KV_HEADS=2`, `TRAIN_BATCH_TOKENS=131072`
+- Total artifact size: `14,733,304` bytes int8+zlib
 
-## Best Raw Score But Invalid
+## Best Invalid Near-Miss
 
 - Experiment: [`AL-20260329-010`](./experiments.tsv)
 - Commit: `fe477f9`
 - Primary metric: `final_int8_ttt_lora`
-- Best raw `val_bpb`: `1.3899`
+- Best invalid `val_bpb`: `1.3899`
 - Shape: `9` layers, `MLP_MULT=3`, `NUM_KV_HEADS=2`, `TRAIN_BATCH_TOKENS=131072`
 - Why invalid: `17,680,105` bytes int8+zlib exceeds the `16,000,000` byte cap
 
 ## Active Tranche
 
 - Tranche: [`T-20260329-C`](./tranches.md#t-20260329-c-width-winner-size-recovery)
-- Goal: recover bytes around the raw width winner and try to turn it into a challenge-valid frontier
-- Status: planned next
+- Goal: finish the size-recovery sweep around the width-biased near-miss and identify the best valid survivor for tranche D
+- Status: active
 
 ## Working Beliefs
 
@@ -39,29 +39,26 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - The first promising width branch is `9L / MLP3`: it improved a lot over `10L / MLP3`, but it still trails the anchor and is slightly too large at 16.18 MB.
 - Width clearly benefits from step recovery: `9L / MLP3 / 131072` became the best raw scorer at `1.3899`, but the artifact grew even further over the cap.
 - A mild global dim trim to `DIM480` is enough to make the width winner valid on size, but not enough to keep it competitive on score.
+- The cleaner byte cut is not a global dim trim. `9L / MLP2 / 131072` kept the high-step regime, stayed well under the size cap, and moved the valid frontier to `1.3838`.
 
 ## Open Questions
 
-- Can a different structural trim recover size without giving back as much score as `DIM480` did?
-- Is there a cleaner width-oriented shape than `9L / MLP3` that keeps most of the gain without the compression failure?
-- If size-recovered candidates lose a bit of score, can optimization recover it?
+- Is `9L / MLP2 / 131072` already the right frontier shape, or can another structural trim beat it?
+- Do the remaining tranche-C runs teach anything useful beyond the new winner, especially about whether one less layer is a cleaner size cut than one less MLP notch?
+- After tranche C closes, does the new winner want more steps, a small LR retune, or another minor size-capacity trade?
 
 ## Next Planned Runs
 
 - Tranche C asks one question:
-  Can the raw width winner be made valid by trimming bytes intelligently?
-- `C1-E1`: `9L / MLP3 / DIM480 / 131072 / kv2`
+  Can width-oriented near-misses be made valid by trimming the right structure, not just shrinking everything?
+- Completed:
+- `C1-E1`: `9L / MLP3 / DIM480 / 131072 / kv2` -> valid but weak
+- `C1-E3`: `9L / MLP2 / 512 / 131072 / kv2` -> new best valid frontier
+- Remaining:
 - `C1-E2`: `9L / MLP3 / DIM448 / 131072 / kv2`
-- `C1-E3`: `9L / MLP2 / 512 / 131072 / kv2`
 - `C1-E4`: `8L / MLP3 / 512 / 131072 / kv2`
 - `C1-E5`: `8L / MLP3 / DIM480 / 131072 / kv2`
-- Tranche D asks the follow-up question:
-  If the size-recovered candidates are valid but slightly weaker, can optimization and extra steps recover the loss?
-- `D1-E1`: `9L / MLP3 / DIM480 / 98304 / kv2`
-- `D1-E2`: `9L / MLP3 / DIM480 / 131072 / kv2 / MATRIX_LR=0.065`
-- `D1-E3`: `9L / MLP2 / 512 / 98304 / kv2`
-- `D1-E4`: `8L / MLP3 / 512 / 98304 / kv2`
-- `D1-E5`: `8L / MLP3 / DIM480 / 98304 / kv2`
+- Tranche D will be rewritten after tranche C finishes so the follow-up runs target the actual survivors instead of the stale draft.
 
 ## Go Deeper
 

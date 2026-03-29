@@ -186,10 +186,10 @@ With the current `10`-layer line, are we getting more value from extra transform
 
 ## T-20260329-C: Width Winner Size Recovery
 
-**Status:** planned next
+**Status:** active
 
 **Goal**  
-Take the raw width winner, [`AL-20260329-010`](./experiments.tsv), and recover enough bytes to become challenge-valid without giving back too much of the score.
+Take the raw width-biased near-miss, [`AL-20260329-010`](./experiments.tsv), and learn which byte cuts preserve the score best while recovering challenge-valid size.
 
 **Main question**  
 Can the `9L / MLP3 / 131072 / kv2` branch be pulled under `16 MB`, and which structural cut loses the least performance per byte saved?
@@ -204,10 +204,10 @@ Can the `9L / MLP3 / 131072 / kv2` branch be pulled under `16 MB`, and which str
 - keep `NUM_KV_HEADS=2`
 - keep tied embeddings
 
-**Anchor**
+**Anchors**
 
 - raw winner: [`AL-20260329-010`](./experiments.tsv) at `1.3899`, but invalid at `17,680,105` bytes
-- best valid comparator: [`AL-20260329-004`](./experiments.tsv) at `1.3913`
+- current best valid comparator: [`AL-20260329-012`](./experiments.tsv) at `1.3838`
 
 **Planned experiments**
 
@@ -225,9 +225,20 @@ Can the `9L / MLP3 / 131072 / kv2` branch be pulled under `16 MB`, and which str
 - if only the more aggressive trims become valid, the next question becomes whether optimization can claw back the lost score
 - if none of the five get close to the raw winner, the width branch may be too byte-hungry in its current form
 
+**Results so far**
+
+- [`AL-20260329-011`](./experiments.tsv) (`C1-E1`, `9L / MLP3 / DIM480 / 131072 / kv2`) proved a mild global dim trim is enough to recover size validity, but not enough score. It landed at `1.3970` and 15.64 MB.
+- [`AL-20260329-012`](./experiments.tsv) (`C1-E3`, `9L / MLP2 / 512 / 131072 / kv2`) produced a much stronger answer: `1.3838`, 14.73 MB, valid, and the new best frontier. This suggests the third MLP notch was the wrong place to spend bytes once the high-step regime was already in place.
+
+**Current reading**
+
+- structural trims matter more than uniform dim trims
+- one MLP-notch cut is currently dominating the dim-trim approach on both score and size
+- the remaining tranche-C runs should now answer whether any 8-layer width-biased survivor teaches something beyond the new `9L / MLP2` winner
+
 ## T-20260329-D: Slim Winner Optimization Recovery
 
-**Status:** planned after C
+**Status:** draft only; rewrite after tranche C closes
 
 **Goal**  
 Take the most promising smaller candidates from tranche C and ask whether optimization or step-recovery can recover the score lost to size-saving cuts.
