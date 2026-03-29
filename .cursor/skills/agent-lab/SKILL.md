@@ -11,7 +11,8 @@ Work like a scientist, not only a tuner.
 
 - **Loop:** question → **hypothesis** → implement → run → **measure** → reflect → new question. Write the hypothesis in `experiments.tsv` and the commit body before you romanticize the result.
 - **Scope:** early runs can be **hyperparameters / schedule / batching** to learn the stack. Then deliberately move to **architecture and training mechanics**: attention patterns, block design, MLP/activations, **why this optimizer**, alternatives from papers or your own guesses, **quantization / QAT / low-precision** paths — always within challenge rules and honest **`val_bpb`**.
-- **Breadth + depth:** don’t only stack wins on one path. From a **shared parent** commit, try **sibling** one-factor experiments (breadth). Go deeper on promising lines. Add **combo** runs when you suspect **interaction** (two ideas that only work together).
+- **Breadth + depth:** work on a **tree**, not only a hill-climb. Start with some clean one-factor branches so attribution is legible, then become more ambitious: sibling branches, combo runs, and small combinatorial sweeps when interaction effects are the real question.
+- **Boldness:** be willing to try original ideas, not only known recipes. A failed branch that teaches you something real is still progress.
 - **Evidence:** negative results belong in the log. Confusion is data.
 
 ## Before changing code
@@ -29,15 +30,18 @@ Work like a scientist, not only a tuner.
 
 ## One-at-a-time vs interaction effects (important)
 
-**Default loop:** change **one** thing between commits when you can — attribution is clean and matches a disciplined ablation.
+**Default early loop:** change **one** thing between commits when that is the cleanest way to understand the stack or isolate a mechanism.
 
 **Reality:** some ideas only work **together** (e.g. smaller batch + higher LR). Pure hill-climbing can **discard** a change that looks neutral alone but is needed for a later combo.
 
 **Practices:**
 
+- Treat one-factor vs multi-factor as a **judgment call**, not a religion.
+- Use initial tranches to calibrate the landscape; then shift toward **multi-thesis** and **interaction-seeking** experiments when the repo has enough baseline knowledge.
 - Keep the **spine** of verified wins; occasionally spawn a **combo** experiment (`Exp: …-combo`) that stacks 2–3 pending ideas and compare to the best single-change line.
 - If a single change **hurts** or is flat, note **`wrong` or `partial`** but add a **follow-up** row if you suspect **interaction** — don’t treat “no immediate gain” as permanently dead without a designed retest.
 - Log **interaction hypotheses** explicitly in `experiments.tsv` notes and the build log so future you (or an agent) can see what was never tried together.
+- If a branch stalls, look outward for inspiration: papers, adjacent projects, and your own novel mechanism ideas are all fair game.
 
 ## Stable experiment IDs
 
@@ -66,6 +70,8 @@ From the project README FAQ:
 
 - **Training:** **≤ ~10 minutes on 8× H100 (SXM)** for record submissions.
 - **Evaluation:** **≤ ~10 minutes on 8× H100** as well — **in addition to** training, not one combined 10-minute window.
+
+For apples-to-apples research in this repo, prefer using the full **600s** training budget unless the run is explicitly marked as a shorter proxy or smoke test.
 
 **Local dev** (e.g. 1× 3090, long TTT wall time) is **not** proof you meet the official eval cap. Before claiming a record, run the **full** train + eval pipeline on **8× H100** (or the official harness) and confirm **both** phases fit.
 

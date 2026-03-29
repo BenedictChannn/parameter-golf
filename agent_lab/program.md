@@ -21,7 +21,7 @@ RUN_ID=... DATA_PATH=./data/datasets/fineweb10B_sp1024/ TOKENIZER_PATH=./data/to
   torchrun --standalone --nproc_per_node=1 agent_lab/train_gpt.py
 ```
 
-`MAX_WALLCLOCK_SECONDS`: default **600** (`Hyperparameters`). Human may set shorter (e.g. `300`) or `0` for no cap.
+`MAX_WALLCLOCK_SECONDS`: default **600** (`Hyperparameters`). For record-track-comparable experiments, use the full **600s** training budget and do not exceed it. Shorter runs are fine for smoke tests or explicit proxy experiments, but do not compare them directly against the 600s line unless documented as a proxy.
 
 **CAN:** edit **`agent_lab/train_gpt.py`** only.
 
@@ -47,6 +47,17 @@ Do not mix metrics across experiments.
 **Simplicity:** prefer smaller diff / less code at equal or better `val_bpb`.
 
 **First run:** baseline = unmodified `agent_lab/train_gpt.py` (env vars for hardware OK).
+
+## Research posture
+
+- Work on a tree, not only a ladder. Each tranche should ask a real question and branch the search space in a way that teaches something.
+- Start with a short calibration tranche of baseline and mostly one-factor experiments so the stack, timing, and major levers become legible.
+- After that, use judgment. Do not force pure one-factor hill-climbing when interaction effects are likely to matter.
+- Run multi-thesis branches, combo experiments, and small combinatorial sweeps when they are the best way to test a mechanism rather than only a single knob.
+- Fail fast, learn fast, pivot fast. Negative results are valuable if they sharpen the next branch.
+- Ask why a result happened, not only whether it won.
+- Periodically look outside the repo for inspiration, including papers and adjacent ideas, when a branch stalls or when you need new mechanisms to test.
+- Be willing to try original ideas, including optimizer, architecture, evaluation, or compression changes that are not yet established, as long as they stay within challenge rules.
 
 ## Scoring lines
 
@@ -80,13 +91,13 @@ Do not commit `results.tsv`.
 Branch: `agent_lab/<tag>` or `agent_lab/<tag>-gpu0`.
 
 1. Note branch/commit.
-2. Change **`agent_lab/train_gpt.py`** (one idea).
+2. Change **`agent_lab/train_gpt.py`** with either one clean factor or a deliberate multi-factor bundle that tests a stated interaction hypothesis.
 3. `git add agent_lab/train_gpt.py && git commit` — subject **`feat(agent-lab): …`** (see [agent-lab SKILL](../.cursor/skills/agent-lab/SKILL.md))
 4. `torchrun ... agent_lab/train_gpt.py > agent_lab/run.log 2>&1` (no `tee`; full redirect).
 5. `grep '^final_int8_ttt_lora\|^peak memory allocated' agent_lab/run.log` (adjust grep if you chose the zlib metric).
 6. Empty primary line → likely crash → `tail -n 80 agent_lab/run.log`; fix trivial errors or log `crash` and revert.
 7. Append TSV row.
-8. Better `val_bpb` → keep commit. Else → `git reset --hard` to last good commit.
+8. Better `val_bpb` or a clearly informative result → keep the branch history and log the lesson. Revert only when the change does not deserve to stay as part of the tree.
 
 **Timeout:** if wall time ≫ **2×** `MAX_WALLCLOCK_SECONDS` + eval slack (e.g. >25 min at 600s cap), kill → discard, revert.
 
