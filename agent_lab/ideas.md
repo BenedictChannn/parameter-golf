@@ -74,6 +74,7 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - Related tranche: [`T-20260329-B`](./tranches.md#t-20260329-b---architecture-necessity-audit)
 - Evidence so far:
 - [`AL-20260329-006`](./experiments.tsv) says `10L / MLP1` alone is not enough; thinner blocks gained steps and headroom but still lost on `val_bpb`
+- [`AL-20260329-008`](./experiments.tsv) says even `11L / MLP1` is not enough; moving width into one extra layer did not beat the `10L / MLP2` balance
 
 ### I-20260329-008 - Residual Controls And Skip Paths Are Overbuilt
 

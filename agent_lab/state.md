@@ -26,6 +26,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Cheaper attention via `NUM_KV_HEADS=1` was not a better trade than keeping `NUM_KV_HEADS=2`.
 - At fixed `10`-layer depth, shrinking the MLP to `MLP_MULT=1` bought steps and artifact headroom, but not enough quality to beat the `MLP_MULT=2` anchor.
 - At fixed `10`-layer depth, widening to `MLP_MULT=3` was clearly bad: fewer steps, worse `val_bpb`, and a 17.43 MB artifact that breaks the cap.
+- Reallocating width into one extra layer via `11L / MLP1` did not rescue the idea; it stayed within size and got good step count, but still lost on quality.
 
 ## Open Questions
 
@@ -35,7 +36,6 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Next Planned Runs
 
-- `B1-E3`: test `11L / MLP1 / 196608 / kv2` to trade width for one more layer.
 - `B1-E4`: test `9L / MLP3 / 196608 / kv2` to trade one layer for more width.
 - `B1-E5`: test `9L / MLP3 / 131072 / kv2` to ask whether width also needs step recovery.
 
