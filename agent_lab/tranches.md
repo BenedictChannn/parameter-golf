@@ -284,12 +284,14 @@ Is the new valid winner still step-limited or slightly under-tuned, and can the 
 
 - [`AL-20260329-016`](./experiments.tsv) (`D1-E1`, `9L / MLP2 / 98304 / kv2`) landed at `1.3721` and 15.48 MB. This is a major frontier jump and strongly confirms that the tranche-C winner was still step-limited.
 - [`AL-20260329-017`](./experiments.tsv) (`D1-E2`, `9L / MLP2 / 131072 / kv2 / MATRIX_LR=0.065`) landed at `1.3909` and 14.92 MB. This is a clear regression and says the big gain did not come from a simple LR mismatch at the old batch size.
+- [`AL-20260329-018`](./experiments.tsv) (`D1-E3`, `9L / MLP2 / 98304 / kv2 / MATRIX_LR=0.065`) landed at `1.3786` and 15.55 MB. Still strong, but worse than `98304` alone, so the step win does not want this LR bump on top.
 
 **Current reading**
 
 - extra steps matter more than we thought on the `9L / MLP2` line
 - LR alone does not rescue the old-batch line
-- the immediate next question is whether the `98304` winner benefits from LR on top of the extra steps, or whether that combo is unnecessary
+- the `98304` winner also does not improve with this LR bump
+- the remaining value in tranche D is now mostly about whether the smaller fallback line can be rescued at all
 
 **Decision rule for D**
 

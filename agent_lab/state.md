@@ -45,6 +45,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - The best fallback after the winner is the combined-light-cuts line, `8L / MLP3 / DIM480 / 131072`. It is valid and stronger than the other fallback trims, but it still sits well behind `9L / MLP2 / 131072`.
 - The winner was still substantially step-limited. Dropping batch to `98304` on `9L / MLP2` was a major gain, not a marginal one, and it still stayed inside the artifact cap.
 - A simple LR bump is not interchangeable with extra steps. `MATRIX_LR=0.065` at `131072` batch fell back to the old frontier band instead of following the `98304` win.
+- The combo test also failed to beat the step-only win. `98304 + MATRIX_LR=0.065` stayed strong, but it still lost clearly to `98304` with the default LR.
 
 ## Open Questions
 
@@ -65,7 +66,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Planned tranche-D runs:
 - `D1-E1`: `9L / MLP2 / 512 / 98304 / kv2` -> complete, new frontier at `1.3721`
 - `D1-E2`: `9L / MLP2 / 512 / 131072 / kv2 / MATRIX_LR=0.065` -> complete, clear regression
-- `D1-E3`: `9L / MLP2 / 512 / 98304 / kv2 / MATRIX_LR=0.065`
+- `D1-E3`: `9L / MLP2 / 512 / 98304 / kv2 / MATRIX_LR=0.065` -> complete, still worse than step-only
 - `D1-E4`: `8L / MLP3 / DIM480 / 98304 / kv2`
 - `D1-E5`: `8L / MLP3 / DIM480 / 98304 / kv2 / MATRIX_LR=0.065`
 

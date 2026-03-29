@@ -65,6 +65,7 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - [`AL-20260329-015`](./experiments.tsv) keeps a second valid survivor alive, so tranche D can compare “optimize the winner” versus “rescue the backup”
 - [`AL-20260329-016`](./experiments.tsv) shows the main winner was still meaningfully step-limited; extra steps, not architecture changes, were the immediate source of the next large gain
 - [`AL-20260329-017`](./experiments.tsv) shows a simple LR bump at the old batch is not the answer; any remaining optimizer gain likely has to be evaluated on top of the `98304` line, not instead of it
+- [`AL-20260329-018`](./experiments.tsv) shows the `98304` winner also does not want this simple LR bump, so the default LR is currently the best setting among the tested options
 
 ### I-20260329-004 - Schedule or Optimizer Retune For 10L
 
