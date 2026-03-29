@@ -156,6 +156,8 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - all the main knobs are already env-exposed, so this family is cheap to test honestly
 - Status: active
 - Related tranche: [`T-20260329-F`](./tranches.md#t-20260329-f-output-path-audit)
+- Evidence so far:
+- [`AL-20260329-026`](./experiments.tsv) says output expressivity is a first-class lever; untied outputs produced a large frontier jump without breaking the size cap
 
 ## Parked
 

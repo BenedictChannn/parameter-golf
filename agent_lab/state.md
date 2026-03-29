@@ -4,12 +4,12 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Current Best Valid
 
-- Experiment: [`AL-20260329-021`](./experiments.tsv)
-- Commit: `2e78e06`
+- Experiment: [`AL-20260329-026`](./experiments.tsv)
+- Commit: `6a734ab`
 - Primary metric: `final_int8_ttt_lora`
-- Best `val_bpb`: `1.3709`
-- Winning branch shape: `9` layers, `MLP_MULT=2`, `MODEL_DIM=512`, `NUM_HEADS=4`, `NUM_KV_HEADS=2`, `TRAIN_BATCH_TOKENS=98304`
-- Total artifact size: `15,329,587` bytes int8+zlib
+- Best `val_bpb`: `1.3614`
+- Winning branch shape: `9` layers, `MLP_MULT=2`, `MODEL_DIM=512`, `NUM_HEADS=4`, `NUM_KV_HEADS=2`, `TRAIN_BATCH_TOKENS=98304`, `TIE_EMBEDDINGS=0`
+- Total artifact size: `15,775,888` bytes int8+zlib
 
 ## Best Invalid Near-Miss
 
@@ -56,12 +56,14 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Softer QK init is not the main win either. `QK_GAIN_INIT=1.0` stayed competitive, but it still did not beat the wider-head direction.
 - Sharper QK init also stayed secondary. `QK_GAIN_INIT=2.0` beat the softer bracket, but neither QK-gain change beat the `q4/kv2` head-geometry win.
 - The next good question is no longer attention. The best line is now `q4/kv2`, and the next likely underexplored lever is the output path: tying, logit softcap, and output-specific learning dynamics.
+- The first output-path probe already moved the frontier a lot. Untying embeddings and the output head was a major gain while still staying under the size cap.
 
 ## Open Questions
 
 - Is the new `q4/kv2` frontier now limited by output-path expressivity?
 - Is `LOGIT_SOFTCAP=30` too loose or too strict for the current frontier?
-- Does the tied output path want a different learning dynamic than the current `TIED_EMBED_LR=0.05`?
+- Does the new untied frontier want softer or sharper output calibration around the current `LOGIT_SOFTCAP=30`?
+- If tied-output tuning wins nothing after F1, should future work drop the tied path and optimize the untied frontier directly?
 
 ## Next Planned Runs
 
@@ -85,7 +87,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Tranche F now asks:
   is the current `q4/kv2` frontier leaving quality on the table because its output path is underexpressive or miscalibrated?
 - Planned tranche-F runs:
-- `F1`: `TIE_EMBEDDINGS=0`
+- `F1`: `TIE_EMBEDDINGS=0` -> complete, new frontier at `1.3614`
 - `F2`: `LOGIT_SOFTCAP=20`
 - `F3`: `LOGIT_SOFTCAP=40`
 - `F4`: `TIED_EMBED_LR=0.03`

@@ -433,3 +433,12 @@ Is the current `9L / MLP2 / 98304 / q4-kv2 / tie_embeddings / logit_softcap=30` 
 - if `F2` or `F3` wins, the next tranche should tune around the winning softcap side before touching architecture again
 - if `F4` or `F5` wins, output-path learning dynamics are mis-set and deserve a small local optimization tranche
 - if none win clearly, the output path is probably not the next bottleneck and the next pivot should move to residual-control simplification
+
+**Results so far**
+
+- [`AL-20260329-026`](./experiments.tsv) (`F1`, untied outputs) landed at `1.3614` and 15.78 MB. This is a major frontier jump and strongly suggests the current `q4/kv2` line was output-path-limited.
+
+**Current reading**
+
+- output expressivity matters a lot more than the repo had previously explored
+- the remaining tranche-F runs are now less about “is the output path important?” and more about whether the tied-path calibration knobs can recover any of that gap, or whether untied outputs should become the new base assumption
