@@ -441,4 +441,14 @@ Is the current `9L / MLP2 / 98304 / q4-kv2 / tie_embeddings / logit_softcap=30` 
 **Current reading**
 
 - output expressivity matters a lot more than the repo had previously explored
-- the remaining tranche-F runs are now less about “is the output path important?” and more about whether the tied-path calibration knobs can recover any of that gap, or whether untied outputs should become the new base assumption
+- untied outputs should now be treated as the new working assumption for this tranche
+- the remaining tranche-F runs should therefore calibrate the untied frontier, not keep spending compute on the weaker tied path
+
+**Adaptive follow-up plan**
+
+- after `F1` won clearly, the remaining four runs were upgraded to focus on the untied frontier itself:
+- `F2`: `TIE_EMBEDDINGS=0, LOGIT_SOFTCAP=20`
+- `F3`: `TIE_EMBEDDINGS=0, LOGIT_SOFTCAP=40`
+- `F4`: `TIE_EMBEDDINGS=0, HEAD_LR=0.004`
+- `F5`: `TIE_EMBEDDINGS=0, HEAD_LR=0.012`
+- this is a better use of compute than continuing to bracket tied-output knobs after untied outputs already showed a large win

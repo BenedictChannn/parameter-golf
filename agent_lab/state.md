@@ -88,10 +88,10 @@ This is the first-read dashboard for autonomous research. Read this file for the
   is the current `q4/kv2` frontier leaving quality on the table because its output path is underexpressive or miscalibrated?
 - Planned tranche-F runs:
 - `F1`: `TIE_EMBEDDINGS=0` -> complete, new frontier at `1.3614`
-- `F2`: `LOGIT_SOFTCAP=20`
-- `F3`: `LOGIT_SOFTCAP=40`
-- `F4`: `TIED_EMBED_LR=0.03`
-- `F5`: `TIED_EMBED_LR=0.07`
+- `F2`: `TIE_EMBEDDINGS=0, LOGIT_SOFTCAP=20`
+- `F3`: `TIE_EMBEDDINGS=0, LOGIT_SOFTCAP=40`
+- `F4`: `TIE_EMBEDDINGS=0, HEAD_LR=0.004`
+- `F5`: `TIE_EMBEDDINGS=0, HEAD_LR=0.012`
 
 ## Go Deeper
 
