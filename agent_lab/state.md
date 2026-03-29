@@ -41,6 +41,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - A mild global dim trim to `DIM480` is enough to make the width winner valid on size, but not enough to keep it competitive on score.
 - The cleaner byte cut is not a global dim trim. `9L / MLP2 / 131072` kept the high-step regime, stayed well under the size cap, and moved the valid frontier to `1.3838`.
 - If a global dim trim is necessary, `DIM448` is the meaningful point, not `DIM480`: it recovered most of the lost score and stayed very small, but it still did not beat the `9L / MLP2` survivor.
+- Dropping one layer is not the cleaner size move here. `8L / MLP3 / 131072` kept decent quality, but it was still over the cap, so the layer cut saved fewer useful bytes than the MLP-notch cut.
 
 ## Open Questions
 
@@ -56,8 +57,8 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - `C1-E1`: `9L / MLP3 / DIM480 / 131072 / kv2` -> valid but weak
 - `C1-E3`: `9L / MLP2 / 512 / 131072 / kv2` -> new best valid frontier
 - `C1-E2`: `9L / MLP3 / DIM448 / 131072 / kv2` -> valid and much stronger than `DIM480`, but still behind `9L / MLP2`
+- `C1-E4`: `8L / MLP3 / 512 / 131072 / kv2` -> respectable score, but still invalid at 16.29 MB
 - Remaining:
-- `C1-E4`: `8L / MLP3 / 512 / 131072 / kv2`
 - `C1-E5`: `8L / MLP3 / DIM480 / 131072 / kv2`
 - Tranche D will be rewritten after tranche C finishes so the follow-up runs target the actual survivors instead of the stale draft.
 
