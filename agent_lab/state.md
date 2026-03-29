@@ -2,7 +2,7 @@
 
 This is the first-read dashboard for autonomous research. Read this file for the high-level picture, then drill down into the linked tranche, idea bank, experiment ledger, and build log.
 
-## Current Best
+## Current Best Valid
 
 - Experiment: [`AL-20260329-004`](./experiments.tsv)
 - Commit: `41e9478`
@@ -10,6 +10,15 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Best `val_bpb`: `1.3913`
 - Winning branch shape: `10` layers, `NUM_KV_HEADS=2`, `TRAIN_BATCH_TOKENS=131072`
 - Total artifact size: `15,824,353` bytes int8+zlib
+
+## Best Raw Score But Invalid
+
+- Experiment: [`AL-20260329-010`](./experiments.tsv)
+- Commit: `fe477f9`
+- Primary metric: `final_int8_ttt_lora`
+- Best raw `val_bpb`: `1.3899`
+- Shape: `9` layers, `MLP_MULT=3`, `NUM_KV_HEADS=2`, `TRAIN_BATCH_TOKENS=131072`
+- Why invalid: `17,680,105` bytes int8+zlib exceeds the `16,000,000` byte cap
 
 ## Active Tranche
 
@@ -28,16 +37,18 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - At fixed `10`-layer depth, widening to `MLP_MULT=3` was clearly bad: fewer steps, worse `val_bpb`, and a 17.43 MB artifact that breaks the cap.
 - Reallocating width into one extra layer via `11L / MLP1` did not rescue the idea; it stayed within size and got good step count, but still lost on quality.
 - The first promising width branch is `9L / MLP3`: it improved a lot over `10L / MLP3`, but it still trails the anchor and is slightly too large at 16.18 MB.
+- Width clearly benefits from step recovery: `9L / MLP3 / 131072` became the best raw scorer at `1.3899`, but the artifact grew even further over the cap.
 
 ## Open Questions
 
-- Is the tiny `131072` edge over `196608` real or just noise?
-- Can we preserve the `10`-layer gain while reclaiming artifact headroom?
-- Can the `9L / MLP3` near-miss turn into a win if we recover more steps, or is width still fundamentally behind depth here?
+- Can the `9L / MLP3 / 131072` winner be pulled back under the size cap without losing its score?
+- Is there a cleaner width-oriented shape than `9L / MLP3` that keeps most of the gain without the compression failure?
+- Should the next tranche focus on width-aware compression, or on a smaller architectural variant around this same idea?
 
 ## Next Planned Runs
 
-- `B1-E5`: test `9L / MLP3 / 131072 / kv2` to ask whether width also needs step recovery.
+- Define the follow-up to the completed B1 tranche before running more width experiments.
+- Favor experiments that specifically target the size failure of `AL-20260329-010`, not another blind width sweep.
 
 ## Go Deeper
 

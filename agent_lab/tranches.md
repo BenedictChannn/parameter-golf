@@ -129,7 +129,7 @@ If a family shows only noise-level differences after a few well-chosen runs, mov
 
 ### B1: MLP Width vs Depth
 
-**Status:** planned next
+**Status:** completed
 
 **Research question**  
 With the current `10`-layer line, are we getting more value from extra transformations, or would some of that budget work better as fatter MLPs?
@@ -169,3 +169,17 @@ With the current `10`-layer line, are we getting more value from extra transform
 - if `B1-E2` beats the anchor, pure width deserves a larger follow-up tranche
 - if `B1-E3` wins, the model is probably under-layered relative to its MLP size
 - if `B1-E4` or `B1-E5` wins, the next tranche should become width-aware rather than purely depth-aware
+
+**Outcome**
+
+- `B1-E1` (`10L / MLP1`) lost: thinning the MLP at fixed depth bought steps and headroom, but not enough quality
+- `B1-E2` (`10L / MLP3`) lost badly and broke the artifact cap
+- `B1-E3` (`11L / MLP1`) also lost, so deeper-but-thinner does not beat the current `10L / MLP2` balance
+- `B1-E4` (`9L / MLP3 / 196608`) was the first promising width branch, but still slightly over the cap and still behind the valid anchor
+- `B1-E5` (`9L / MLP3 / 131072`) produced the best raw score so far at `1.3899`, which strongly suggests width needed more steps, but it is invalid at `17.68 MB`
+
+**Reading**
+
+- width is not dead, but it only became competitive after both reducing depth and recovering more steps
+- the best valid frontier is still [`AL-20260329-004`](./experiments.tsv) at `1.3913`
+- the most interesting follow-up is no longer “is width good?” but “can the `9L / MLP3` winner be made challenge-valid without losing its score?”

@@ -64,6 +64,7 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - Evidence so far:
 - [`AL-20260329-007`](./experiments.tsv) says pure width at fixed depth is not promising in this naive form; it was slower, worse, and oversize
 - [`AL-20260329-009`](./experiments.tsv) says width becomes more plausible when paired with one fewer layer, but it still trails the anchor and misses the size cap slightly
+- [`AL-20260329-010`](./experiments.tsv) says width also needs step recovery; with more steps it became the best raw scorer, but the artifact failure got worse
 
 ### I-20260329-010 - The Current MLP May Already Be Too Wide
 
