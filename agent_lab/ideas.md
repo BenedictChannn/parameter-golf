@@ -139,6 +139,8 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - `NUM_HEADS`, `NUM_KV_HEADS`, and `QK_GAIN_INIT` are already exposed and can test this family cheaply and honestly
 - Status: active
 - Related tranche: [`T-20260329-E`](./tranches.md#t-20260329-e-attention-geometry-audit)
+- Evidence so far:
+- [`AL-20260329-021`](./experiments.tsv) says the frontier does respond to attention geometry; `q4/kv2` is better than the previous `q8/kv2` winner
 
 ## Parked
 

@@ -358,3 +358,12 @@ Is the current `9L / MLP2 / 98304 / q8-kv2 / QK_GAIN_INIT=1.5` setup the right a
 - if `E3` wins, the new frontier may have outgrown `kv2`, and future capacity planning should treat KV sharing as a first-class tradeoff again
 - if `E4` or `E5` wins, attention sharpness was mis-set and we should tune around the winning side rather than touching architecture broadly
 - if none win clearly, attention geometry is probably not the next bottleneck and the next tranche should pivot to output-path or residual-control simplification
+
+**Results so far**
+
+- [`AL-20260329-021`](./experiments.tsv) (`E1`, `q4/kv2`) landed at `1.3709` and 15.33 MB. This is a real frontier improvement and strongly suggests the current model wants fewer, wider query heads rather than the previous `q8` default.
+
+**Current reading**
+
+- the frontier appears to be attention-geometry-sensitive after all
+- the remaining tranche-E runs are now even more valuable because they tell us whether `q4` is the real direction or just a lucky point on a wider attention-shape curve
