@@ -466,3 +466,54 @@ Is the current `9L / MLP2 / 98304 / q4-kv2` frontier leaving quality on the tabl
 - main conclusion: output path is a first-class frontier family on this challenge, not an afterthought
 - secondary conclusion: the best-tested configuration now uses untied outputs, tighter clipping, and a somewhat faster output-head learning rate
 - next pivot: either run one narrow local tranche around the untied output path, or switch families and test residual-control or skip-topology simplification from the new anchor
+
+## T-20260330-G: Untied Output Local Calibration
+
+**Status:** active
+
+**Goal**  
+Test whether the current best line, [`AL-20260329-030`](./experiments.tsv), still has local output-path headroom nearby before we pivot to a colder component family.
+
+**Main question**  
+Is `untied + LOGIT_SOFTCAP=20 + HEAD_LR=0.012` already near the local optimum, or can a tighter nearby calibration beat it?
+
+**Why this tranche exists**
+
+- tranche F ended on an active win, not a flat result
+- the most compute-worthy next move is to exploit the still-warm local neighborhood before abandoning the family
+- this is also a clean test of the new manifest-driven harness, because the tranche is env-only and tightly scoped
+
+**Base controls**
+
+- anchor shape: `9L / MLP2 / MODEL_DIM=512 / TRAIN_BATCH_TOKENS=98304 / NUM_HEADS=4 / NUM_KV_HEADS=2 / TIE_EMBEDDINGS=0`
+- keep `MAX_WALLCLOCK_SECONDS=600`
+- keep primary metric `final_int8_ttt_lora`
+- keep tokenizer and validation semantics unchanged
+- keep all non-output-path optimizer settings at the current best defaults
+
+**Anchor**
+
+- [`AL-20260329-030`](./experiments.tsv) at `1.3564`, 15.80 MB
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | What it teaches |
+|---|---|---|---|---|
+| `G1` | `LOGIT_SOFTCAP=15, HEAD_LR=0.012` | Test stronger clipping | The current winner may still be slightly overconfident, so tighter clipping could help further | Whether the softcap optimum is below `20` |
+| `G2` | `LOGIT_SOFTCAP=25, HEAD_LR=0.012` | Test slightly looser clipping | The current winner may already be slightly over-clipped, so relaxing to `25` could help | Whether `20` was too aggressive rather than just better than `40` |
+| `G3` | `LOGIT_SOFTCAP=20, HEAD_LR=0.010` | Test a slightly slower head LR | The useful direction may be upward from `0.008`, but the true local optimum could still sit below `0.012` | Whether the head-LR optimum is slightly lower than the current best |
+| `G4` | `LOGIT_SOFTCAP=20, HEAD_LR=0.016` | Test a slightly faster head LR | The untied head may still be under-updated | Whether the head-LR optimum is still above the current best |
+| `G5` | `LOGIT_SOFTCAP=15, HEAD_LR=0.016` | Test the strongest local combo | If both “more clipping” and “faster head updates” are the right directions, they may stack | Whether the local output-path gains are additive rather than isolated |
+
+**Why these five are worth the compute**
+
+- `G1` and `G2` bracket the current softcap winner tightly instead of wasting compute on distant values we already weakened
+- `G3` and `G4` bracket the current head-LR winner tightly for the same reason
+- `G5` is the one justified combo test because it stacks the two strongest local “more” directions from tranche F
+
+**Decision rule for G**
+
+- if `G1` or `G2` wins, run one final narrow softcap confirmation before pivoting families
+- if `G3` or `G4` wins, run one final head-LR confirmation before pivoting families
+- if `G5` wins, the output path is still actively compounding and deserves one more mini-tranche
+- if all five lose clearly, close the output-path family for now and pivot to residual-control or skip-topology simplification

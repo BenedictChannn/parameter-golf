@@ -163,6 +163,16 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - [`AL-20260329-029`](./experiments.tsv) says slower head-LR is competitive but secondary to output calibration
 - [`AL-20260329-030`](./experiments.tsv) says output-head learning dynamics are also real; a somewhat faster `HEAD_LR=0.012` beat both the default and slower-head-LR versions of the untied + softcap20 frontier
 
+### I-20260330-001 - The Untied Output Frontier Still Has Local Headroom
+
+- Category: output path
+- Hypothesis: the current best line is still slightly mis-set locally, and a tighter neighborhood around `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012` can produce one more immediate frontier step.
+- Why it might work:
+- tranche F ended on an active win rather than a flattening result
+- the best-tested softcap and head-LR settings were only bracketed coarsely, not tightly
+- Status: active
+- Related tranche: [`T-20260330-G`](./tranches.md#t-20260330-g-untied-output-local-calibration)
+
 ## Parked
 
 ### I-20260329-006 - KV1 As The Main Frontier Lever

@@ -22,9 +22,9 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Active Tranche
 
-- Tranche: [`T-20260329-F`](./tranches.md#t-20260329-f-output-path-audit)
-- Goal: test whether the new `q4/kv2` frontier is now limited by output-path expressivity or calibration rather than by attention geometry
-- Status: completed
+- Tranche: [`T-20260330-G`](./tranches.md#t-20260330-g-untied-output-local-calibration)
+- Goal: test whether the current best untied-output line still has local output-path headroom nearby before we pivot to a colder family
+- Status: in progress
 
 ## Working Beliefs
 
@@ -61,24 +61,23 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Looser clipping did not win the bracket. `LOGIT_SOFTCAP=40` stayed strong, but it still lost clearly to `20`, so the output-calibration result is directional.
 - Slower head LR is not the main win. `HEAD_LR=0.004` stayed competitive, but calibration still matters more than this first head-LR reduction.
 - Faster head LR on the untied + softcap20 line is the new best result so far. `HEAD_LR=0.012` beat both the default and slower-head-LR variants, so output-head learning dynamics are a real follow-on lever rather than noise.
+- The next compute-worthy question is a narrow one: whether the local output-path optimum sits slightly above, below, or exactly at the current `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012`.
 
 ## Open Questions
 
-- Is `LOGIT_SOFTCAP=20` the real optimum for the untied frontier, or just the best point we have bracketed so far?
-- Does the untied frontier want a still more aggressive or more targeted output-head learning setup than `HEAD_LR=0.012`?
-- Is the next best compute-worthy move another narrow output-path calibration tranche, or is the bottleneck now elsewhere in the architecture?
-- If output-path tuning starts to flatten, should the next family be residual-control simplification or skip-topology cleanup?
+- Is `LOGIT_SOFTCAP=20` the real local optimum for the untied frontier, or just the best coarse point we have tested so far?
+- Is the best local `HEAD_LR` slightly below `0.012`, slightly above it, or already right on it?
+- Do the strongest local output-path directions stack, or are they isolated single-knob effects?
+- If this narrow local tranche flattens, should the next family be residual-control simplification or skip-topology cleanup?
 
 ## Next Planned Runs
 
-- Tranche F takeaway:
-- output path is a first-class frontier lever
-- untied outputs helped a lot
-- `LOGIT_SOFTCAP=20` improved the untied frontier again
-- `HEAD_LR=0.012` beat both the default and the slower head-LR probe
-- likely next compute-worthy options:
-- a narrow follow-up on untied output calibration and head-learning dynamics around the new best line
-- or a clean family pivot into residual-control and skip-topology simplification using the tranche-F winner as the new anchor
+- `G1`: `LOGIT_SOFTCAP=15, HEAD_LR=0.012`
+- `G2`: `LOGIT_SOFTCAP=25, HEAD_LR=0.012`
+- `G3`: `LOGIT_SOFTCAP=20, HEAD_LR=0.010`
+- `G4`: `LOGIT_SOFTCAP=20, HEAD_LR=0.016`
+- `G5`: `LOGIT_SOFTCAP=15, HEAD_LR=0.016`
+- this tranche is also the first real live test of the manifest runner and generated per-run summary path
 
 ## Go Deeper
 
