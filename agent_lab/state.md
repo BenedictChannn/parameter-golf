@@ -24,7 +24,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 - Tranche: [`T-20260330-H`](./tranches.md#t-20260330-h-residual-control-simplification)
 - Goal: test whether the current best line is carrying unnecessary residual-control and skip-path complexity
-- Status: in progress
+- Status: completed
 
 ## Working Beliefs
 
@@ -64,21 +64,24 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - The next compute-worthy question is a narrow one: whether the local output-path optimum sits slightly above, below, or exactly at the current `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012`.
 - Tranche G mostly closed that loop. Nearby scalar moves around `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012` did not produce a clear new winner, so the local output neighborhood now looks mostly mapped.
 - The next best family is now residual controls and skip topology. These are still distinctive to this script and are now exposed cleanly enough to test with env vars.
+- The first residual-control probe already answered something concrete. Removing `resid_mix` regressed badly, so learned input-stream mixing is still materially helping the current frontier.
+- The second residual-control probe also lost. Removing learned residual scales regressed more modestly than `H1`, but still clearly enough that plain unit residuals do not look better on this frontier.
+- The third residual-control probe was a near tie. `SKIP_MODE=unit` came in only `0.0004` behind the frontier, which strongly suggests skip topology matters more than learning the skip weights.
+- The fourth residual-control probe clarified that story. `SKIP_MODE=off` lost much more clearly than `SKIP_MODE=unit`, so the skip topology itself is useful and the learned weighting looks like the softer target.
+- The full simplification package failed hard. `H5` did not reveal a hidden interaction win, so there is no sign that residual simplification becomes good when stacked together.
+- Tranche H overall says: do not spend the next tranche on generic residual simplification. The only live lesson is that unit skip weights are almost free, while the skip topology itself should stay.
 
 ## Open Questions
 
-- Does removing `resid_mix` help, hurt, or do almost nothing on the current best line?
-- Are learned residual scales necessary, or would plain unit residuals work as well or better?
-- Is the skip topology itself helpful, or only the fact that the model has another residual path?
-- Do these simplifications stack cleanly, or does only one of them matter?
+- Can a more radical attention redesign beat the current `q4/kv2` block instead of merely compressing the existing residual structure?
+- Can a hybrid recurrent or delta-style mixer replace some attention layers under the 600s budget?
+- Is the next frontier in compressed attention, in hybrid sequence mixing, or in a new golf-native block that combines both?
 
 ## Next Planned Runs
 
-- `H1`: `USE_RESID_MIX=0`
-- `H2`: `USE_ATTN_SCALE=0, USE_MLP_SCALE=0`
-- `H3`: `SKIP_MODE=unit`
-- `H4`: `SKIP_MODE=off`
-- `H5`: `USE_RESID_MIX=0, USE_ATTN_SCALE=0, USE_MLP_SCALE=0, SKIP_MODE=unit`
+- Next tranche candidate I: latent-KV / MLA-lite attention compression
+- Next tranche candidate J: hybrid delta-style / state-space mixer layers
+- Residual simplification follow-up is not the priority unless it is specifically about fixed unit skip weights
 
 ## Go Deeper
 

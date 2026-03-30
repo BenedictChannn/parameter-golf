@@ -71,3 +71,77 @@ Use [`state.md`](./state.md) for the live dashboard, [`ideas.md`](./ideas.md) fo
 - the `AL-20260330-001` tie means there may still be noise-scale room in the family, just not a clear new winner.
 - Next falsification:
 - if a later output-path tranche adds a new mechanism rather than a nearby scalar retune and wins again, this finding becomes “the local scalar neighborhood is mapped” rather than “the family is done.”
+
+## F-20260330-006: `resid_mix` Is Still Earning Its Keep
+
+- Claim: learned input-stream mixing is still a useful part of the current frontier rather than removable baggage.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260330-006`](./experiments.tsv) removed `resid_mix` and regressed sharply from `1.3564` to `1.3763`.
+- The regression was large enough that this does not look like local noise.
+- Counterevidence:
+- none yet; this is the first direct `resid_mix` ablation on the current best family.
+- Next falsification:
+- if a later broader residual simplification package wins while still removing `resid_mix`, then the interaction story matters more than `resid_mix` alone.
+
+## F-20260330-007: Learned Residual Scales Also Still Help
+
+- Claim: the per-channel learned residual scales are still useful on the current frontier, even if they matter less than `resid_mix`.
+- Confidence: medium
+- Evidence:
+- [`AL-20260330-007`](./experiments.tsv) removed both learned residual scales and regressed from `1.3564` to `1.3666`.
+- The result stayed valid and somewhat smaller, but the quality loss was still too large to call a win.
+- Counterevidence:
+- the regression was smaller than the `resid_mix` ablation, so this family may still have interaction effects rather than being purely indispensable one knob at a time.
+- Next falsification:
+- test whether skip-path changes or a broader simplification package can recover the lost quality while still reducing residual-control complexity.
+
+## F-20260330-008: Skip Topology May Matter More Than Learned Skip Weights
+
+- Claim: the skip-path topology itself may be doing the real work, while the learned skip-weight parameterization is at most a second-order effect.
+- Confidence: medium
+- Evidence:
+- [`AL-20260330-008`](./experiments.tsv) replaced learned skip weights with unit skip additions and nearly tied the frontier at `1.3568`.
+- This was much stronger than the `resid_mix` and learned-scale ablations.
+- Counterevidence:
+- it still did not beat the anchor, so learned skip weights might still be worth a small amount.
+- Next falsification:
+- run the stronger topology ablation (`SKIP_MODE=off`). If that loses clearly while `SKIP_MODE=unit` nearly ties, the topology is the important part.
+
+## F-20260330-009: Skip Topology Is Useful, Even If Learned Skip Weights Are Not Essential
+
+- Claim: the skip connections themselves are helping on the current frontier, and the weaker part of the design is the learned skip weighting rather than the topology.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260330-009`](./experiments.tsv) removed skip topology entirely and regressed to `1.3610`.
+- This was much worse than [`AL-20260330-008`](./experiments.tsv), which kept the topology but used unit skip additions and nearly tied the frontier.
+- Counterevidence:
+- `SKIP_MODE=off` is still far better than the `resid_mix` ablation, so not every residual-control removal is equally damaging.
+- Next falsification:
+- run the broader simplification package (`H5`). If that still fails, then residual simplification likely is not the next frontier family.
+
+## F-20260330-010: Residual Simplification Does Not Become Good Just Because It Is Combined
+
+- Claim: the residual-control family does not hide a broad simplification win that only appears when multiple control removals are stacked together.
+- Confidence: high
+- Evidence:
+- [`AL-20260330-010`](./experiments.tsv) combined the main simplifications and regressed badly to `1.3807`.
+- This was worse than every other tranche-H run except the strongest single `resid_mix` removal, so the package did not unlock a hidden clean regime.
+- Counterevidence:
+- none meaningful in the current frontier family.
+- Next falsification:
+- only revisit this family if a future architecture change fundamentally alters the role of the residual paths.
+
+## F-20260330-011: Tranche H Mostly Closed the Residual-Simplification Family
+
+- Claim: tranche H says residual simplification is not the next major frontier family, except that fixed unit skip weights may preserve most of the skip benefit.
+- Confidence: high
+- Evidence:
+- [`AL-20260330-006`](./experiments.tsv) and [`AL-20260330-007`](./experiments.tsv) show `resid_mix` and learned residual scales still help.
+- [`AL-20260330-008`](./experiments.tsv) shows unit skip weights nearly tie the frontier.
+- [`AL-20260330-009`](./experiments.tsv) shows removing skip topology itself is meaningfully worse.
+- [`AL-20260330-010`](./experiments.tsv) rules out a hidden combo win.
+- Counterevidence:
+- `AL-20260330-008` means one narrow simplification path is still alive if we later want a cleaner skip parameterization.
+- Next falsification:
+- revisit only if a more radical architecture change makes the residual system play a different role.

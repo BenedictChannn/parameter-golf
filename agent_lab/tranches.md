@@ -469,7 +469,7 @@ Is the current `9L / MLP2 / 98304 / q4-kv2` frontier leaving quality on the tabl
 
 ## T-20260330-G: Untied Output Local Calibration
 
-**Status:** active
+**Status:** completed
 
 **Goal**  
 Test whether the current best line, [`AL-20260329-030`](./experiments.tsv), still has local output-path headroom nearby before we pivot to a colder component family.
@@ -590,3 +590,25 @@ Are `resid_mix`, learned residual scales, and learned skip weights still helping
 - if `H4` wins, skip topology is now a serious simplification target
 - if `H5` wins, the residual family likely wants a broader simplification pass
 - if all five lose clearly, residual controls are probably not the next bottleneck and we should pivot elsewhere
+
+**Results so far**
+
+- [`AL-20260330-006`](./experiments.tsv) (`H1`, `USE_RESID_MIX=0`) landed at `1.3763` and 15.82 MB. This is a clear regression from the `1.3564` anchor, so learned input-stream mixing is still materially helping on the current frontier.
+- [`AL-20260330-007`](./experiments.tsv) (`H2`, `USE_ATTN_SCALE=0, USE_MLP_SCALE=0`) landed at `1.3666` and 15.64 MB. This also regressed clearly, though less than `H1`, so the learned residual scales still appear to be earning their keep.
+- [`AL-20260330-008`](./experiments.tsv) (`H3`, `SKIP_MODE=unit`) landed at `1.3568` and 15.80 MB. This nearly tied the `1.3564` anchor, so the skip topology may matter more than learning per-skip weights.
+- [`AL-20260330-009`](./experiments.tsv) (`H4`, `SKIP_MODE=off`) landed at `1.3610` and 15.81 MB. This lost much more clearly than `H3`, so the skip topology itself is useful and the learned skip weighting is the more plausible simplification target.
+- [`AL-20260330-010`](./experiments.tsv) (`H5`, `USE_RESID_MIX=0, USE_ATTN_SCALE=0, USE_MLP_SCALE=0, SKIP_MODE=unit`) landed at `1.3807` and 15.65 MB. The full simplification package failed badly, so there is no evidence for a hidden “all together is better” interaction.
+
+**Current reading**
+
+- the residual family is not the next frontier family
+- `resid_mix` is clearly valuable
+- learned residual scales are also useful
+- the skip topology itself is useful
+- the only near-live simplification result is that unit skip weights nearly match learned skip weights
+
+**Outcome**
+
+- best result from this tranche: no new winner; the anchor [`AL-20260329-030`](./experiments.tsv) remains best at `1.3564`
+- main conclusion: generic residual simplification is not the next breakthrough path, but the model likely does not need learned skip weights to get most of the skip benefit
+- next pivot: move to a bold architecture tranche, most likely latent-KV attention compression or a hybrid recurrent mixer
