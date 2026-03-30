@@ -189,6 +189,17 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - Status: active
 - Related tranche: [`T-20260330-H`](./tranches.md#t-20260330-h-residual-control-simplification)
 
+### I-20260330-003 - Not Every Layer Needs Full Attention
+
+- Category: architecture
+- Hypothesis: some layers can switch from full attention to a cheaper state-space-inspired sequence mixer without giving back much quality under the same `600s` budget.
+- Why it might work:
+- tranche H mostly closed the generic residual-simplification path
+- the next serious upside is likely in changing the block, not pruning scalars
+- a hybrid stack may trade some attention expressivity for more efficient sequence processing
+- Status: active
+- Related tranche: [`T-20260330-J`](./tranches.md#t-20260330-j-hybrid-sequence-mixer-audit)
+
 ## Parked
 
 ### I-20260329-006 - KV1 As The Main Frontier Lever

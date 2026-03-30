@@ -612,3 +612,47 @@ Are `resid_mix`, learned residual scales, and learned skip weights still helping
 - best result from this tranche: no new winner; the anchor [`AL-20260329-030`](./experiments.tsv) remains best at `1.3564`
 - main conclusion: generic residual simplification is not the next breakthrough path, but the model likely does not need learned skip weights to get most of the skip benefit
 - next pivot: move to a bold architecture tranche, most likely latent-KV attention compression or a hybrid recurrent mixer
+
+## T-20260330-J: Hybrid Sequence Mixer Audit
+
+**Status:** active
+
+**Goal**  
+Test whether some transformer attention layers can be replaced by a cheaper state-space-inspired sequence mixer without giving back too much quality under the same `600s` budget.
+
+**Main question**  
+Does every layer really need full attention, or can a hybrid stack keep most of the quality while using a cheaper mixer in selected layers?
+
+**Why this tranche exists**
+
+- tranche H mostly closed the generic residual-simplification path
+- the next worthwhile move is architectural, not scalar
+- a hybrid mixer tests a different modeling principle rather than another local transformer retune
+
+**Base controls**
+
+- anchor shape: `9L / MLP2 / MODEL_DIM=512 / TRAIN_BATCH_TOKENS=98304 / NUM_HEADS=4 / NUM_KV_HEADS=2 / TIE_EMBEDDINGS=0 / LOGIT_SOFTCAP=20 / HEAD_LR=0.012`
+- keep `MAX_WALLCLOCK_SECONDS=600`
+- keep primary metric `final_int8_ttt_lora`
+- keep tokenizer and validation semantics unchanged
+- keep `MIXER_DIM=256`, `MIXER_KERNEL=4` fixed across the tranche
+
+**Anchor**
+
+- [`AL-20260329-030`](./experiments.tsv) at `1.3564`, 15.80 MB
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | What it teaches |
+|---|---|---|---|---|
+| `J1` | `MIXER_LAYERS=3,4,5` | Replace the middle three attention layers | The middle of the stack may be the safest place to use a cheaper sequence mixer | Whether the hybrid idea is viable at all |
+| `J2` | `MIXER_LAYERS=2,3,4,5,6` | Replace the middle five layers | More of the stack may be replaceable than we expect | Whether the hybrid win, if any, scales beyond a light swap |
+| `J3` | `MIXER_LAYERS=1,3,5,7` | Alternate attention and mixer layers | Alternating global routing and cheaper local mixing may work better than block replacement | Whether interleaving beats contiguous replacement |
+| `J4` | `MIXER_LAYERS=0,1,2,3` | Replace the lower four layers | Early layers may tolerate cheaper mixing while later attention stays full-fidelity | Whether lower-layer replacement is the cleaner placement |
+| `J5` | `MIXER_LAYERS=5,6,7,8` | Replace the upper four layers | Later layers may be the better place to save attention cost | Whether upper-layer replacement is the cleaner placement |
+
+**Why these five are worth the compute**
+
+- every run tests a distinct placement theory rather than a scalar retune
+- the tranche asks a real architectural question: where, if anywhere, can attention be replaced?
+- if all five lose, that still teaches us something strong about the current frontier

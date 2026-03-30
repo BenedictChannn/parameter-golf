@@ -73,6 +73,9 @@ class Hyperparameters:
     use_attn_scale = bool(int(os.environ.get("USE_ATTN_SCALE", "1")))
     use_mlp_scale = bool(int(os.environ.get("USE_MLP_SCALE", "1")))
     skip_mode = os.environ.get("SKIP_MODE", "learned")
+    mixer_layers = os.environ.get("MIXER_LAYERS", "")
+    mixer_dim = int(os.environ.get("MIXER_DIM", 256))
+    mixer_kernel = int(os.environ.get("MIXER_KERNEL", 4))
 
     # Optimizer hyperparameters.
     embed_lr = float(os.environ.get("EMBED_LR", 0.6))
@@ -617,6 +620,33 @@ class CausalSelfAttention(nn.Module):
         return self.proj(y)
 
 
+class CausalSequenceMixer(nn.Module):
+    def __init__(self, dim: int, mixer_dim: int, kernel_size: int):
+        super().__init__()
+        if mixer_dim <= 0 or mixer_dim > dim:
+            raise ValueError(f"mixer_dim must be in [1, {dim}], got {mixer_dim}")
+        if kernel_size < 2:
+            raise ValueError(f"mixer_kernel must be >= 2, got {kernel_size}")
+        self.mixer_dim = mixer_dim
+        self.kernel_size = kernel_size
+        self.in_proj = CastedLinear(dim, 2 * mixer_dim, bias=False)
+        self.dw_kernel = nn.Parameter(torch.empty(mixer_dim, kernel_size))
+        self.out_proj = CastedLinear(mixer_dim, dim, bias=False)
+        self.out_proj._zero_init = True
+        nn.init.normal_(self.dw_kernel, mean=0.0, std=0.02)
+
+    def forward(self, x: Tensor) -> Tensor:
+        u, gate = self.in_proj(x).chunk(2, dim=-1)
+        u = F.rms_norm(u, (u.size(-1),))
+        u = u.transpose(1, 2)
+        kernel = self.dw_kernel[:, None, :].to(dtype=u.dtype)
+        u = F.pad(u, (self.kernel_size - 1, 0))
+        u = F.conv1d(u, kernel, bias=None, groups=self.mixer_dim)
+        u = u.transpose(1, 2)
+        y = F.silu(gate) * u
+        return self.out_proj(y)
+
+
 class MLP(nn.Module):
     # relu^2 MLP from the original modded-nanogpt setup
     def __init__(self, dim: int, mlp_mult: int):
@@ -634,6 +664,7 @@ class MLP(nn.Module):
 class Block(nn.Module):
     def __init__(
         self,
+        layer_idx: int,
         dim: int,
         num_heads: int,
         num_kv_heads: int,
@@ -643,11 +674,16 @@ class Block(nn.Module):
         use_resid_mix: bool,
         use_attn_scale: bool,
         use_mlp_scale: bool,
+        mixer_layers: set[int],
+        mixer_dim: int,
+        mixer_kernel: int,
     ):
         super().__init__()
         self.attn_norm = RMSNorm()
         self.mlp_norm = RMSNorm()
-        self.attn = CausalSelfAttention(dim, num_heads, num_kv_heads, rope_base, qk_gain_init)
+        self.use_mixer = layer_idx in mixer_layers
+        self.attn = None if self.use_mixer else CausalSelfAttention(dim, num_heads, num_kv_heads, rope_base, qk_gain_init)
+        self.mixer = CausalSequenceMixer(dim, mixer_dim, mixer_kernel) if self.use_mixer else None
         self.mlp = MLP(dim, mlp_mult)
         self.attn_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32)) if use_attn_scale else None
         self.mlp_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32)) if use_mlp_scale else None
@@ -660,9 +696,12 @@ class Block(nn.Module):
             mix = self.resid_mix.to(dtype=x.dtype)
             x = mix[0][None, None, :] * x + mix[1][None, None, :] * x0
         n = self.attn_norm(x)
-        qd = q_delta_fn(n) if q_delta_fn is not None else None
-        vd = v_delta_fn(n) if v_delta_fn is not None else None
-        attn_out = self.attn(n, qd, vd)
+        if self.use_mixer:
+            attn_out = self.mixer(n)
+        else:
+            qd = q_delta_fn(n) if q_delta_fn is not None else None
+            vd = v_delta_fn(n) if v_delta_fn is not None else None
+            attn_out = self.attn(n, qd, vd)
         if self.attn_scale is None:
             x = x + attn_out
         else:
@@ -693,6 +732,9 @@ class GPT(nn.Module):
         use_attn_scale: bool,
         use_mlp_scale: bool,
         skip_mode: str,
+        mixer_layers: set[int],
+        mixer_dim: int,
+        mixer_kernel: int,
     ):
         super().__init__()
         if logit_softcap <= 0.0:
@@ -715,6 +757,7 @@ class GPT(nn.Module):
         self.blocks = nn.ModuleList(
             [
                 Block(
+                    i,
                     model_dim,
                     num_heads,
                     num_kv_heads,
@@ -724,6 +767,9 @@ class GPT(nn.Module):
                     use_resid_mix,
                     use_attn_scale,
                     use_mlp_scale,
+                    mixer_layers,
+                    mixer_dim,
+                    mixer_kernel,
                 )
                 for i in range(num_layers)
             ]
@@ -1066,6 +1112,12 @@ def main() -> None:
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
+    mixer_layers: set[int] = set()
+    if args.mixer_layers.strip():
+        mixer_layers = {int(idx) for idx in args.mixer_layers.split(",") if idx.strip()}
+        bad = sorted(idx for idx in mixer_layers if idx < 0 or idx >= args.num_layers)
+        if bad:
+            raise ValueError(f"mixer layer indices out of range for num_layers={args.num_layers}: {bad}")
 
     if not args.tokenizer_path.endswith(".model"):
         raise ValueError(f"Script only setup for SentencePiece .model file: {args.tokenizer_path}")
@@ -1104,6 +1156,9 @@ def main() -> None:
         use_attn_scale=args.use_attn_scale,
         use_mlp_scale=args.use_mlp_scale,
         skip_mode=args.skip_mode,
+        mixer_layers=mixer_layers,
+        mixer_dim=args.mixer_dim,
+        mixer_kernel=args.mixer_kernel,
     ).to(device).bfloat16()
     for module in base_model.modules():
         if isinstance(module, CastedLinear):
@@ -1176,6 +1231,10 @@ def main() -> None:
     log0(
         f"control_modes:resid_mix={args.use_resid_mix} attn_scale={args.use_attn_scale} "
         f"mlp_scale={args.use_mlp_scale} skip_mode={args.skip_mode}"
+    )
+    log0(
+        f"sequence_mixer:layers={','.join(str(i) for i in sorted(mixer_layers)) if mixer_layers else 'none'} "
+        f"mixer_dim:{args.mixer_dim} mixer_kernel:{args.mixer_kernel}"
     )
     log0(
         f"train_batch_tokens:{args.train_batch_tokens} train_seq_len:{args.train_seq_len} "

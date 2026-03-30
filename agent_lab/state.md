@@ -22,9 +22,9 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Active Tranche
 
-- Tranche: [`T-20260330-H`](./tranches.md#t-20260330-h-residual-control-simplification)
-- Goal: test whether the current best line is carrying unnecessary residual-control and skip-path complexity
-- Status: completed
+- Tranche: [`T-20260330-J`](./tranches.md#t-20260330-j-hybrid-sequence-mixer-audit)
+- Goal: test whether some attention layers can be replaced by a cheaper sequence mixer without giving back too much quality
+- Status: in progress
 
 ## Working Beliefs
 
@@ -73,15 +73,17 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Open Questions
 
-- Can a more radical attention redesign beat the current `q4/kv2` block instead of merely compressing the existing residual structure?
-- Can a hybrid recurrent or delta-style mixer replace some attention layers under the 600s budget?
-- Is the next frontier in compressed attention, in hybrid sequence mixing, or in a new golf-native block that combines both?
+- Is the middle of the stack the safest place to replace attention with a cheaper sequence mixer?
+- Does interleaving attention and mixer layers work better than replacing one contiguous attention block?
+- If a hybrid stack works at all, is early-layer replacement or late-layer replacement the cleaner placement?
 
 ## Next Planned Runs
 
-- Next tranche candidate I: latent-KV / MLA-lite attention compression
-- Next tranche candidate J: hybrid delta-style / state-space mixer layers
-- Residual simplification follow-up is not the priority unless it is specifically about fixed unit skip weights
+- `J1`: `MIXER_LAYERS=3,4,5`
+- `J2`: `MIXER_LAYERS=2,3,4,5,6`
+- `J3`: `MIXER_LAYERS=1,3,5,7`
+- `J4`: `MIXER_LAYERS=0,1,2,3`
+- `J5`: `MIXER_LAYERS=5,6,7,8`
 
 ## Go Deeper
 
