@@ -172,6 +172,22 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - the best-tested softcap and head-LR settings were only bracketed coarsely, not tightly
 - Status: active
 - Related tranche: [`T-20260330-G`](./tranches.md#t-20260330-g-untied-output-local-calibration)
+- Evidence so far:
+- [`AL-20260330-001`](./experiments.tsv) says there is still tie-scale sensitivity on the stronger-clipping side, but not a clean new win.
+- [`AL-20260330-002`](./experiments.tsv), [`AL-20260330-003`](./experiments.tsv), and [`AL-20260330-004`](./experiments.tsv) say the obvious nearby scalar moves all lose.
+- [`AL-20260330-005`](./experiments.tsv) says even the strongest local combo did not beat the anchor.
+- Status: parked
+
+### I-20260330-002 - Residual Controls And Skip Paths Are The Next Likely Bottleneck
+
+- Category: architecture
+- Hypothesis: after width, steps, attention, and output path are improved, the next meaningful gain may come from simplifying or retuning `resid_mix`, `attn_scale`, `mlp_scale`, or `skip_weights`.
+- Why it might work:
+- the output-path local neighborhood now looks mostly mapped
+- these controls are distinctive to this script and still under-tested
+- `architecture_review.md` already flags them as a plausible overbuilt family
+- Status: active
+- Related tranche: none yet
 
 ## Parked
 

@@ -57,3 +57,17 @@ Use [`state.md`](./state.md) for the live dashboard, [`ideas.md`](./ideas.md) fo
 - [`AL-20260329-028`](./experiments.tsv) and [`AL-20260329-029`](./experiments.tsv) show not every output-path change wins.
 - Next falsification:
 - if a narrow local output tranche flattens, the next gains may come from residual or skip-path simplification instead.
+
+## F-20260330-005: The Local Output Optimum Looks Mostly Mapped
+
+- Claim: the narrow local neighborhood around `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012` looks mostly exhausted for now.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260330-001`](./experiments.tsv) effectively tied the best line at 4 decimals, but did not beat it and came in slightly larger.
+- [`AL-20260330-002`](./experiments.tsv) shows that relaxing softcap above `20` is worse.
+- [`AL-20260330-003`](./experiments.tsv) and [`AL-20260330-004`](./experiments.tsv) show that moving `HEAD_LR` slightly below or above `0.012` is also worse.
+- [`AL-20260330-005`](./experiments.tsv) says even the strongest local combo stayed just behind the anchor.
+- Counterevidence:
+- the `AL-20260330-001` tie means there may still be noise-scale room in the family, just not a clear new winner.
+- Next falsification:
+- if a later output-path tranche adds a new mechanism rather than a nearby scalar retune and wins again, this finding becomes “the local scalar neighborhood is mapped” rather than “the family is done.”

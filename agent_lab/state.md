@@ -24,7 +24,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 - Tranche: [`T-20260330-G`](./tranches.md#t-20260330-g-untied-output-local-calibration)
 - Goal: test whether the current best untied-output line still has local output-path headroom nearby before we pivot to a colder family
-- Status: in progress
+- Status: completed
 
 ## Working Beliefs
 
@@ -62,22 +62,22 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Slower head LR is not the main win. `HEAD_LR=0.004` stayed competitive, but calibration still matters more than this first head-LR reduction.
 - Faster head LR on the untied + softcap20 line is the new best result so far. `HEAD_LR=0.012` beat both the default and slower-head-LR variants, so output-head learning dynamics are a real follow-on lever rather than noise.
 - The next compute-worthy question is a narrow one: whether the local output-path optimum sits slightly above, below, or exactly at the current `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012`.
+- Tranche G mostly closed that loop. Nearby scalar moves around `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012` did not produce a clear new winner, so the local output neighborhood now looks mostly mapped.
 
 ## Open Questions
 
-- Is `LOGIT_SOFTCAP=20` the real local optimum for the untied frontier, or just the best coarse point we have tested so far?
-- Is the best local `HEAD_LR` slightly below `0.012`, slightly above it, or already right on it?
-- Do the strongest local output-path directions stack, or are they isolated single-knob effects?
-- If this narrow local tranche flattens, should the next family be residual-control simplification or skip-topology cleanup?
+- Are the residual controls or skip paths now the cleanest next component family to attack?
+- Should the next tranche test simplification first, or local retuning of those controls around the current best anchor?
+- Is there still any value in a deeper output-path mechanism change, or is the current output family better treated as “good enough for now”?
 
 ## Next Planned Runs
 
-- `G1`: `LOGIT_SOFTCAP=15, HEAD_LR=0.012`
-- `G2`: `LOGIT_SOFTCAP=25, HEAD_LR=0.012`
-- `G3`: `LOGIT_SOFTCAP=20, HEAD_LR=0.010`
-- `G4`: `LOGIT_SOFTCAP=20, HEAD_LR=0.016`
-- `G5`: `LOGIT_SOFTCAP=15, HEAD_LR=0.016`
-- this tranche is also the first real live test of the manifest runner and generated per-run summary path
+- Tranche G takeaway:
+- the new manifest runner completed a full 5-run tranche successfully
+- the per-run summary path produced usable scientific closeout material
+- the best local output-path point still appears to be `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012`
+- likely next compute-worthy pivot:
+- residual-control and skip-topology simplification from the current best anchor
 
 ## Go Deeper
 

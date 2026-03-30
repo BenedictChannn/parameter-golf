@@ -98,7 +98,7 @@ Move from “buy more steps” to “reallocate capacity more intelligently.”
 
 ## T-20260329-B: Architecture Necessity Audit
 
-**Status:** active
+**Status:** completed
 
 **Goal**  
 Break the model into major components and ask, one family at a time, whether each piece is actually earning its bytes, compute, and optimization complexity.
@@ -517,3 +517,24 @@ Is `untied + LOGIT_SOFTCAP=20 + HEAD_LR=0.012` already near the local optimum, o
 - if `G3` or `G4` wins, run one final head-LR confirmation before pivoting families
 - if `G5` wins, the output path is still actively compounding and deserves one more mini-tranche
 - if all five lose clearly, close the output-path family for now and pivot to residual-control or skip-topology simplification
+
+**Results**
+
+- [`AL-20260330-001`](./experiments.tsv) (`G1`, `LOGIT_SOFTCAP=15, HEAD_LR=0.012`) landed at `1.3564` and 15.81 MB. This effectively tied the current best at 4 decimals, but it was not clearly better and came in slightly larger.
+- [`AL-20260330-002`](./experiments.tsv) (`G2`, `LOGIT_SOFTCAP=25, HEAD_LR=0.012`) landed at `1.3570` and 15.79 MB. Slightly looser clipping lost clear ground.
+- [`AL-20260330-003`](./experiments.tsv) (`G3`, `LOGIT_SOFTCAP=20, HEAD_LR=0.010`) landed at `1.3599` and 15.80 MB. A slightly slower head LR was clearly worse.
+- [`AL-20260330-004`](./experiments.tsv) (`G4`, `LOGIT_SOFTCAP=20, HEAD_LR=0.016`) landed at `1.3574` and 15.81 MB. A slightly faster head LR was also worse.
+- [`AL-20260330-005`](./experiments.tsv) (`G5`, `LOGIT_SOFTCAP=15, HEAD_LR=0.016`) landed at `1.3565` and 15.82 MB. The strongest local combo stayed extremely close, but still did not beat the anchor.
+
+**Current reading**
+
+- the local output-path neighborhood is now much better mapped
+- `LOGIT_SOFTCAP=20` still looks like the best local point we have tested
+- `HEAD_LR=0.012` also still looks like the best local point we have tested
+- there may still be noise-scale room in the family, but not enough to justify another pure scalar micro-sweep right away
+
+**Outcome**
+
+- best result from this tranche: no new winner; the anchor [`AL-20260329-030`](./experiments.tsv) remains best at `1.3564`
+- main conclusion: the output family is still strong, but its local scalar neighborhood now looks mostly exhausted
+- next pivot: move to residual-control or skip-topology simplification rather than another immediate output micro-sweep
