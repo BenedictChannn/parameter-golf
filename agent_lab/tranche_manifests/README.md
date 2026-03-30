@@ -14,6 +14,20 @@ Use them to define:
 
 They are not meant to replace [`tranches.md`](../tranches.md). The markdown file remains the human-readable research map. The manifest is the machine-readable execution plan.
 
+Important:
+
+- manifests in this folder are intended to be executable with the current codebase
+- manifests under `planned/` are research blueprints for future tranches that still require code support
+- do not execute a planned manifest until the required env knobs or code paths exist in `agent_lab/train_gpt.py`
+- sequential multi-tranche runs can be chained with `python3 scripts/agent_lab/run_program.py ...`
+
+Optional human-only fields are allowed and ignored by the runner, for example:
+
+- `goal`
+- `what_it_teaches`
+- `why_worthy`
+- `implementation_status`
+
 Minimal shape:
 
 ```json

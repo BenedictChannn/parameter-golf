@@ -1,0 +1,94 @@
+{
+  "tranche_id": "T-20260330-N",
+  "title": "Mechanism-Specific Learning Rates",
+  "research_question": "Are promising architectures being held back by shared broad learning rates rather than by the mechanism itself?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260329-030",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012",
+    "MATRIX_LR": "0.06"
+  },
+  "candidates": [
+    {
+      "name": "n1-attn-up-mlp-down",
+      "exp_id": "AL-20260330-121",
+      "goal": "Train attention faster than MLP to see whether the current frontier is attention-underdated.",
+      "hypothesis": "The model may now be more attention-limited than MLP-limited, so attention weights need to move faster relative to MLP weights.",
+      "what_it_teaches": "Whether subsystem-specific LR splits outperform one shared matrix LR.",
+      "why_worthy": "This is the cleanest first test of 'not all matrix parameters should learn at the same speed'.",
+      "description": "raise attention LR and lower MLP LR relative to the matrix baseline",
+      "env": {
+        "ATTN_MATRIX_LR": "0.07",
+        "MLP_MATRIX_LR": "0.05"
+      }
+    },
+    {
+      "name": "n2-attn-down-mlp-up",
+      "exp_id": "AL-20260330-122",
+      "goal": "Test the opposite subsystem-learning balance.",
+      "hypothesis": "The current frontier may instead be MLP-underdated or over-rotating attention updates.",
+      "what_it_teaches": "Whether the direction of subsystem imbalance is real or imagined.",
+      "why_worthy": "This brackets the first mechanism-specific LR split instead of assuming one direction.",
+      "description": "lower attention LR and raise MLP LR relative to the matrix baseline",
+      "env": {
+        "ATTN_MATRIX_LR": "0.05",
+        "MLP_MATRIX_LR": "0.07"
+      }
+    },
+    {
+      "name": "n3-late-layer-boost",
+      "exp_id": "AL-20260330-123",
+      "goal": "Give later layers a modest learning-rate advantage over early layers.",
+      "hypothesis": "The top of the stack may be under-updated under a uniform layer LR because it carries more output-facing burden.",
+      "what_it_teaches": "Whether the learning-rate imbalance is across depth rather than across module type.",
+      "why_worthy": "This is a genuinely different axis from attention-vs-MLP splits.",
+      "description": "boost late-layer LR slightly above early-layer LR",
+      "env": {
+        "EARLY_LAYER_LR_SCALE": "0.9",
+        "LATE_LAYER_LR_SCALE": "1.1"
+      }
+    },
+    {
+      "name": "n4-early-layer-boost",
+      "exp_id": "AL-20260330-124",
+      "goal": "Test the mirror image of the depth-wise LR split.",
+      "hypothesis": "The bottom of the stack may need more aggressive learning because it builds all later representations.",
+      "what_it_teaches": "Whether early or late layers are the better target for LR asymmetry.",
+      "why_worthy": "This completes the depth-wise LR bracket instead of biasing toward one story.",
+      "description": "boost early-layer LR slightly above late-layer LR",
+      "env": {
+        "EARLY_LAYER_LR_SCALE": "1.1",
+        "LATE_LAYER_LR_SCALE": "0.9"
+      }
+    },
+    {
+      "name": "n5-new-mechanism-boost",
+      "exp_id": "AL-20260330-125",
+      "goal": "Give newly introduced mechanism weights their own faster LR rather than training them at the same speed as the old backbone.",
+      "hypothesis": "Some future architecture ideas fail because their new parameters learn too slowly relative to the pretrained-like backbone of the script.",
+      "what_it_teaches": "Whether architecture failures are partly optimization failures in disguise.",
+      "why_worthy": "This is the tranche's bridge into future bold architectures like latent-KV or mixers.",
+      "description": "assign a faster LR to new mechanism parameters relative to the backbone",
+      "env": {
+        "NEW_MECH_LR_SCALE": "1.25"
+      }
+    }
+  ]
+}

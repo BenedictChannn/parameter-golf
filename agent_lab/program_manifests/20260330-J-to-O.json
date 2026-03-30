@@ -1,0 +1,13 @@
+{
+  "program_id": "P-20260330-JO",
+  "title": "Six Bold Architecture Tranches",
+  "description": "Run tranche families J through O sequentially once their code support is present.",
+  "tranches": [
+    "agent_lab/tranche_manifests/20260330-J-hybrid-sequence-mixer.json",
+    "agent_lab/tranche_manifests/20260330-K-output-head-architecture.json",
+    "agent_lab/tranche_manifests/20260330-L-local-global-attention.json",
+    "agent_lab/tranche_manifests/20260330-M-skip-residual-redesign.json",
+    "agent_lab/tranche_manifests/20260330-N-mechanism-specific-lrs.json",
+    "agent_lab/tranche_manifests/20260330-O-quantization-aware-warmdown.json"
+  ]
+}

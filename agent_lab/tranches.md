@@ -726,7 +726,7 @@ Does every layer really need full attention, or can a hybrid stack keep most of 
 
 ## Queued Manifest Roadmap
 
-These are the next six tranche manifests prepared for the lab. `T-20260330-J` is runnable with the current codebase. The others live under [`tranche_manifests/planned/`](./tranche_manifests/planned) and should only be executed after their code surfaces exist.
+These are the next six tranche manifests prepared for the lab. All six are now runnable with the current codebase. The sequential program manifest is [`P-20260330-JO`](./program_manifests/20260330-J-to-O.json).
 
 ### T-20260330-J - Hybrid Sequence Mixer Audit
 
@@ -737,35 +737,35 @@ These are the next six tranche manifests prepared for the lab. `T-20260330-J` is
 
 ### T-20260330-K - Output Head Architecture Audit
 
-- Manifest: [`20260330-K-output-head-architecture.json`](./tranche_manifests/planned/20260330-K-output-head-architecture.json)
+- Manifest: [`20260330-K-output-head-architecture.json`](./tranche_manifests/20260330-K-output-head-architecture.json)
 - Why it is worthy:
 - output path has already produced some of the largest gains in the project
 - the next good question is output-head architecture, not more scalar tuning
 
 ### T-20260330-L - Local-Global Attention Split
 
-- Manifest: [`20260330-L-local-global-attention.json`](./tranche_manifests/planned/20260330-L-local-global-attention.json)
+- Manifest: [`20260330-L-local-global-attention.json`](./tranche_manifests/20260330-L-local-global-attention.json)
 - Why it is worthy:
 - attention geometry already mattered a lot
 - the next structural question is whether global attention is needed in every layer
 
 ### T-20260330-M - Skip and Residual Redesign
 
-- Manifest: [`20260330-M-skip-residual-redesign.json`](./tranche_manifests/planned/20260330-M-skip-residual-redesign.json)
+- Manifest: [`20260330-M-skip-residual-redesign.json`](./tranche_manifests/20260330-M-skip-residual-redesign.json)
 - Why it is worthy:
 - tranche H showed deletion is mostly the wrong question
 - the live path is redesigning routing, not removing it
 
 ### T-20260330-N - Mechanism-Specific Learning Rates
 
-- Manifest: [`20260330-N-mechanism-specific-lrs.json`](./tranche_manifests/planned/20260330-N-mechanism-specific-lrs.json)
+- Manifest: [`20260330-N-mechanism-specific-lrs.json`](./tranche_manifests/20260330-N-mechanism-specific-lrs.json)
 - Why it is worthy:
 - some architecture failures may actually be optimization failures
 - this gives future bold mechanisms a fairer training regime
 
 ### T-20260330-O - Quantization-Aware Warmdown
 
-- Manifest: [`20260330-O-quantization-aware-warmdown.json`](./tranche_manifests/planned/20260330-O-quantization-aware-warmdown.json)
+- Manifest: [`20260330-O-quantization-aware-warmdown.json`](./tranche_manifests/20260330-O-quantization-aware-warmdown.json)
 - Why it is worthy:
 - the submitted model is compressed, not the raw fp model
 - challenge-specific end-of-training behavior may matter more than generic schedule quality
