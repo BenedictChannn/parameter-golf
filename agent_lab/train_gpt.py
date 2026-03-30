@@ -73,6 +73,8 @@ class Hyperparameters:
     use_attn_scale = bool(int(os.environ.get("USE_ATTN_SCALE", "1")))
     use_mlp_scale = bool(int(os.environ.get("USE_MLP_SCALE", "1")))
     skip_mode = os.environ.get("SKIP_MODE", "learned")
+    latent_kv_layers = os.environ.get("LATENT_KV_LAYERS", "")
+    latent_kv_dim = int(os.environ.get("LATENT_KV_DIM", 0))
     mixer_layers = os.environ.get("MIXER_LAYERS", "")
     mixer_dim = int(os.environ.get("MIXER_DIM", 256))
     mixer_kernel = int(os.environ.get("MIXER_KERNEL", 4))
@@ -574,6 +576,7 @@ class CausalSelfAttention(nn.Module):
         num_kv_heads: int,
         rope_base: float,
         qk_gain_init: float,
+        latent_kv_dim: int = 0,
     ):
         super().__init__()
         if dim % num_heads != 0:
@@ -586,9 +589,16 @@ class CausalSelfAttention(nn.Module):
         if self.head_dim % 2 != 0:
             raise ValueError("head_dim must be even for RoPE")
         kv_dim = self.num_kv_heads * self.head_dim
+        self.use_latent_kv = latent_kv_dim > 0
         self.c_q = CastedLinear(dim, dim, bias=False)
-        self.c_k = CastedLinear(dim, kv_dim, bias=False)
-        self.c_v = CastedLinear(dim, kv_dim, bias=False)
+        if self.use_latent_kv:
+            self.c_kv_latent = CastedLinear(dim, latent_kv_dim, bias=False)
+            self.c_k = CastedLinear(latent_kv_dim, kv_dim, bias=False)
+            self.c_v = CastedLinear(latent_kv_dim, kv_dim, bias=False)
+        else:
+            self.c_kv_latent = None
+            self.c_k = CastedLinear(dim, kv_dim, bias=False)
+            self.c_v = CastedLinear(dim, kv_dim, bias=False)
         self.proj = CastedLinear(dim, dim, bias=False)
         self.proj._zero_init = True
         self.q_gain = nn.Parameter(torch.full((num_heads,), qk_gain_init, dtype=torch.float32))
@@ -597,8 +607,12 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x: Tensor, q_delta=None, v_delta=None) -> Tensor:
         bsz, seqlen, dim = x.shape
         q = self.c_q(x) + (q_delta if q_delta is not None else 0)
-        k = self.c_k(x)
-        v = self.c_v(x) + (v_delta if v_delta is not None else 0)
+        kv_in = x
+        if self.c_kv_latent is not None:
+            kv_in = self.c_kv_latent(x)
+            kv_in = F.rms_norm(kv_in, (kv_in.size(-1),))
+        k = self.c_k(kv_in)
+        v = self.c_v(kv_in) + (v_delta if v_delta is not None else 0)
         q = q.reshape(bsz, seqlen, self.num_heads, self.head_dim).transpose(1, 2)
         k = k.reshape(bsz, seqlen, self.num_kv_heads, self.head_dim).transpose(1, 2)
         v = v.reshape(bsz, seqlen, self.num_kv_heads, self.head_dim).transpose(1, 2)
@@ -674,6 +688,8 @@ class Block(nn.Module):
         use_resid_mix: bool,
         use_attn_scale: bool,
         use_mlp_scale: bool,
+        latent_kv_layers: set[int],
+        latent_kv_dim: int,
         mixer_layers: set[int],
         mixer_dim: int,
         mixer_kernel: int,
@@ -682,7 +698,10 @@ class Block(nn.Module):
         self.attn_norm = RMSNorm()
         self.mlp_norm = RMSNorm()
         self.use_mixer = layer_idx in mixer_layers
-        self.attn = None if self.use_mixer else CausalSelfAttention(dim, num_heads, num_kv_heads, rope_base, qk_gain_init)
+        attn_latent_kv_dim = latent_kv_dim if layer_idx in latent_kv_layers and not self.use_mixer else 0
+        self.attn = None if self.use_mixer else CausalSelfAttention(
+            dim, num_heads, num_kv_heads, rope_base, qk_gain_init, attn_latent_kv_dim
+        )
         self.mixer = CausalSequenceMixer(dim, mixer_dim, mixer_kernel) if self.use_mixer else None
         self.mlp = MLP(dim, mlp_mult)
         self.attn_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32)) if use_attn_scale else None
@@ -732,6 +751,8 @@ class GPT(nn.Module):
         use_attn_scale: bool,
         use_mlp_scale: bool,
         skip_mode: str,
+        latent_kv_layers: set[int],
+        latent_kv_dim: int,
         mixer_layers: set[int],
         mixer_dim: int,
         mixer_kernel: int,
@@ -767,6 +788,8 @@ class GPT(nn.Module):
                     use_resid_mix,
                     use_attn_scale,
                     use_mlp_scale,
+                    latent_kv_layers,
+                    latent_kv_dim,
                     mixer_layers,
                     mixer_dim,
                     mixer_kernel,
@@ -852,6 +875,16 @@ class BatchedLinearLoRA(nn.Module):
             self.A.uniform_(-bound, bound)  # kaiming-uniform
             self.B.zero_()
 
+
+class BatchedZeroLoRA(nn.Module):
+    def __init__(self, out_features: int):
+        super().__init__()
+        self.out_features = out_features
+
+    def forward(self, x: Tensor) -> Tensor:
+        return x.new_zeros(x.size(0), x.size(1), self.out_features)
+
+
 class BatchedTTTLoRA(nn.Module):
     """All LoRA adapters for one batch: LM head and Q/V per block."""
     def __init__(self, bsz: int, model: GPT, rank: int):
@@ -862,8 +895,12 @@ class BatchedTTTLoRA(nn.Module):
         self.q_loras = nn.ModuleList()
         self.v_loras = nn.ModuleList()
         for block in model.blocks:
-            self.q_loras.append(BatchedLinearLoRA(bsz, dim, block.attn.c_q.weight.shape[0], rank))
-            self.v_loras.append(BatchedLinearLoRA(bsz, dim, block.attn.c_v.weight.shape[0], rank))
+            if block.attn is None:
+                self.q_loras.append(BatchedZeroLoRA(dim))
+                self.v_loras.append(BatchedZeroLoRA(dim))
+            else:
+                self.q_loras.append(BatchedLinearLoRA(bsz, dim, block.attn.c_q.weight.shape[0], rank))
+                self.v_loras.append(BatchedLinearLoRA(bsz, dim, block.attn.c_v.weight.shape[0], rank))
 
     def reset(self) -> None:
         for m in self.modules():
@@ -1112,6 +1149,12 @@ def main() -> None:
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
+    latent_kv_layers: set[int] = set()
+    if args.latent_kv_layers.strip():
+        latent_kv_layers = {int(idx) for idx in args.latent_kv_layers.split(",") if idx.strip()}
+        bad = sorted(idx for idx in latent_kv_layers if idx < 0 or idx >= args.num_layers)
+        if bad:
+            raise ValueError(f"latent kv layer indices out of range for num_layers={args.num_layers}: {bad}")
     mixer_layers: set[int] = set()
     if args.mixer_layers.strip():
         mixer_layers = {int(idx) for idx in args.mixer_layers.split(",") if idx.strip()}
@@ -1156,6 +1199,8 @@ def main() -> None:
         use_attn_scale=args.use_attn_scale,
         use_mlp_scale=args.use_mlp_scale,
         skip_mode=args.skip_mode,
+        latent_kv_layers=latent_kv_layers,
+        latent_kv_dim=args.latent_kv_dim,
         mixer_layers=mixer_layers,
         mixer_dim=args.mixer_dim,
         mixer_kernel=args.mixer_kernel,
@@ -1231,6 +1276,10 @@ def main() -> None:
     log0(
         f"control_modes:resid_mix={args.use_resid_mix} attn_scale={args.use_attn_scale} "
         f"mlp_scale={args.use_mlp_scale} skip_mode={args.skip_mode}"
+    )
+    log0(
+        f"latent_kv:layers={','.join(str(i) for i in sorted(latent_kv_layers)) if latent_kv_layers else 'none'} "
+        f"latent_kv_dim:{args.latent_kv_dim}"
     )
     log0(
         f"sequence_mixer:layers={','.join(str(i) for i in sorted(mixer_layers)) if mixer_layers else 'none'} "

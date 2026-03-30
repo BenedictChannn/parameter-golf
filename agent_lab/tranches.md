@@ -613,6 +613,50 @@ Are `resid_mix`, learned residual scales, and learned skip weights still helping
 - main conclusion: generic residual simplification is not the next breakthrough path, but the model likely does not need learned skip weights to get most of the skip benefit
 - next pivot: move to a bold architecture tranche, most likely latent-KV attention compression or a hybrid recurrent mixer
 
+## T-20260330-I: Latent-KV Attention Audit
+
+**Status:** active
+
+**Goal**  
+Test whether the current attention block is over-spending on full K/V structure, and whether a latent-KV bottleneck can preserve quality while buying speed or size headroom.
+
+**Main question**  
+Can compressed K/V structure keep most of the useful attention behavior under the same `600s` training budget?
+
+**Why this tranche exists**
+
+- tranche H mostly closed the generic residual-simplification path
+- the next worthwhile step is to change the block, not prune one more scalar
+- latent-KV attention is a bold but still interpretable architecture change
+
+**Base controls**
+
+- anchor shape: `9L / MLP2 / MODEL_DIM=512 / TRAIN_BATCH_TOKENS=98304 / NUM_HEADS=4 / NUM_KV_HEADS=2 / TIE_EMBEDDINGS=0 / LOGIT_SOFTCAP=20 / HEAD_LR=0.012`
+- keep `MAX_WALLCLOCK_SECONDS=600`
+- keep primary metric `final_int8_ttt_lora`
+- keep tokenizer and validation semantics unchanged
+- keep `MIXER_LAYERS` disabled for tranche I
+
+**Anchor**
+
+- [`AL-20260329-030`](./experiments.tsv) at `1.3564`, 15.80 MB
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | What it teaches |
+|---|---|---|---|---|
+| `I1` | `LATENT_KV_LAYERS=0,1,2,3,4,5,6,7,8`, `LATENT_KV_DIM=128` | Mild latent-KV compression across all layers | There is real redundancy in the full K/V path, and mild compression may preserve quality almost intact | Whether latent-KV is viable at all |
+| `I2` | `LATENT_KV_LAYERS=0,1,2,3,4,5,6,7,8`, `LATENT_KV_DIM=64` | Stronger latent-KV compression across all layers | The frontier may tolerate much more K/V compression than we expect | Whether the idea scales beyond a mild bottleneck |
+| `I3` | `LATENT_KV_LAYERS=5,6,7,8`, `LATENT_KV_DIM=64` | Compress only the upper layers | Later layers may tolerate K/V compression better than earlier ones | Whether late compression is the cleanest placement |
+| `I4` | `LATENT_KV_LAYERS=0,1,2,3`, `LATENT_KV_DIM=64` | Compress only the lower layers | Early layers may be the cheaper place to simplify attention while preserving later fidelity | Whether early compression is the cleanest placement |
+| `I5` | `NUM_LAYERS=10`, `LATENT_KV_LAYERS=0,1,2,3,4,5,6,7,8,9`, `LATENT_KV_DIM=128` | Reinvest latent-KV savings into more depth | Latent-KV may only win if the saved budget is spent on extra transformations rather than taken as free efficiency | Whether compressed attention plus extra depth beats the plain transformer frontier |
+
+**Why these five are worth the compute**
+
+- every run tests a distinct mechanism-level question, not a scalar retune
+- the tranche asks both whether latent-KV works and where it works
+- `I5` tests the most important second-order question: what to do with the savings if the idea works
+
 ## T-20260330-J: Hybrid Sequence Mixer Audit
 
 **Status:** active

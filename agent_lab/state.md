@@ -22,8 +22,8 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Active Tranche
 
-- Tranche: [`T-20260330-J`](./tranches.md#t-20260330-j-hybrid-sequence-mixer-audit)
-- Goal: test whether some attention layers can be replaced by a cheaper sequence mixer without giving back too much quality
+- Tranche: [`T-20260330-I`](./tranches.md#t-20260330-i-latent-kv-attention-audit)
+- Goal: test whether the current attention block is over-spending on full K/V structure
 - Status: in progress
 
 ## Working Beliefs
@@ -73,17 +73,17 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Open Questions
 
-- Is the middle of the stack the safest place to replace attention with a cheaper sequence mixer?
-- Does interleaving attention and mixer layers work better than replacing one contiguous attention block?
-- If a hybrid stack works at all, is early-layer replacement or late-layer replacement the cleaner placement?
+- Can mild latent-KV compression across all layers stay close to the frontier?
+- If strong latent-KV loses, is it because all-layer compression is too aggressive, or because the wrong part of the stack is being compressed?
+- If latent-KV buys real savings, is the best use of those savings extra depth?
 
 ## Next Planned Runs
 
-- `J1`: `MIXER_LAYERS=3,4,5`
-- `J2`: `MIXER_LAYERS=2,3,4,5,6`
-- `J3`: `MIXER_LAYERS=1,3,5,7`
-- `J4`: `MIXER_LAYERS=0,1,2,3`
-- `J5`: `MIXER_LAYERS=5,6,7,8`
+- `I1`: all-layer latent-KV with `LATENT_KV_DIM=128`
+- `I2`: all-layer latent-KV with `LATENT_KV_DIM=64`
+- `I3`: upper-layer latent-KV with `LATENT_KV_DIM=64`
+- `I4`: lower-layer latent-KV with `LATENT_KV_DIM=64`
+- `I5`: all-layer latent-KV `128` plus `10` layers
 
 ## Go Deeper
 

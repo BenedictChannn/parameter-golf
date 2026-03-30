@@ -200,6 +200,16 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - Status: active
 - Related tranche: [`T-20260330-J`](./tranches.md#t-20260330-j-hybrid-sequence-mixer-audit)
 
+### I-20260330-004 - Full K/V Structure May Be Overbuilt
+
+- Category: architecture
+- Hypothesis: the current attention block may be over-spending parameters and compute on full K/V projections, and a latent-KV bottleneck can preserve most of the useful attention behavior.
+- Why it might work:
+- MLA-style ideas suggest K/V structure can be compressed without collapsing usefulness
+- the parameter golf setting rewards anything that buys more steps or more capacity under the same wall-clock budget
+- Status: active
+- Related tranche: [`T-20260330-I`](./tranches.md#t-20260330-i-latent-kv-attention-audit)
+
 ## Parked
 
 ### I-20260329-006 - KV1 As The Main Frontier Lever
