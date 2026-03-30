@@ -187,7 +187,7 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - these controls are distinctive to this script and still under-tested
 - `architecture_review.md` already flags them as a plausible overbuilt family
 - Status: active
-- Related tranche: none yet
+- Related tranche: [`T-20260330-H`](./tranches.md#t-20260330-h-residual-control-simplification)
 
 ## Parked
 

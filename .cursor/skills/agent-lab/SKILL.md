@@ -48,7 +48,9 @@ Work like a scientist, not only a tuner.
 - **`agent_lab/plots/experiments.*`** is the fast visual summary.
 - **`docs/build-logs/*`** is the long-form reasoning trail.
 
-When a tranche is already defined cleanly, prefer using a manifest under `agent_lab/tranche_manifests/` plus `python3 scripts/agent_lab/run_tranche.py ...` so execution is reproducible and resumable.
+When a tranche is already defined cleanly, you may use a manifest under `agent_lab/tranche_manifests/` plus `python3 scripts/agent_lab/run_tranche.py ...` so execution is reproducible and resumable.
+
+Important: keep tranche-to-tranche scientific judgment in the chat loop. The runner is execution support, not the scientist.
 
 Keep the short surfaces concise and linked. Do not force a later session to reconstruct the lab state from one giant prose log.
 

@@ -538,3 +538,55 @@ Is `untied + LOGIT_SOFTCAP=20 + HEAD_LR=0.012` already near the local optimum, o
 - best result from this tranche: no new winner; the anchor [`AL-20260329-030`](./experiments.tsv) remains best at `1.3564`
 - main conclusion: the output family is still strong, but its local scalar neighborhood now looks mostly exhausted
 - next pivot: move to residual-control or skip-topology simplification rather than another immediate output micro-sweep
+
+## T-20260330-H: Residual Control Simplification
+
+**Status:** active
+
+**Goal**  
+Test whether the current best line is carrying unnecessary residual-control and skip-path complexity, and whether a simpler residual system can match or beat it.
+
+**Main question**  
+Are `resid_mix`, learned residual scales, and learned skip weights still helping on the current frontier, or are they now overbuilt baggage?
+
+**Why this tranche exists**
+
+- tranche G mapped the local output-path neighborhood closely enough that another scalar micro-sweep is not the best use of compute
+- residual controls and skip topology remain under-tested and are one of the most distinctive architecture families in this script
+- this family can now be tested cleanly with env vars instead of a new code edit for every ablation
+
+**Base controls**
+
+- anchor shape: `9L / MLP2 / MODEL_DIM=512 / TRAIN_BATCH_TOKENS=98304 / NUM_HEADS=4 / NUM_KV_HEADS=2 / TIE_EMBEDDINGS=0 / LOGIT_SOFTCAP=20 / HEAD_LR=0.012`
+- keep `MAX_WALLCLOCK_SECONDS=600`
+- keep primary metric `final_int8_ttt_lora`
+- keep tokenizer and validation semantics unchanged
+
+**Anchor**
+
+- [`AL-20260329-030`](./experiments.tsv) at `1.3564`, 15.80 MB
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | What it teaches |
+|---|---|---|---|---|
+| `H1` | `USE_RESID_MIX=0` | Remove learned input-stream mixing | `resid_mix` may be unnecessary now that the frontier is better trained and better calibrated | Whether the initial-embedding blend is still earning its complexity |
+| `H2` | `USE_ATTN_SCALE=0, USE_MLP_SCALE=0` | Replace learned residual scales with unit residuals | Per-channel learned residual scales may be optimization baggage rather than useful expressivity | Whether the model wants simpler fixed residual addition |
+| `H3` | `SKIP_MODE=unit` | Keep skip topology but remove learned skip weights | The skip structure may help, but the learned skip weights may be unnecessary | Whether skip learning matters more than skip existence |
+| `H4` | `SKIP_MODE=off` | Remove skip topology entirely | The encoder/decoder-style skips may no longer be earning their keep | Whether the topology itself is the useful part or just historical carry-over |
+| `H5` | `USE_RESID_MIX=0, USE_ATTN_SCALE=0, USE_MLP_SCALE=0, SKIP_MODE=unit` | Test a coherent simplification package | Several individually small simplifications may stack better than one-at-a-time ablations | Whether the residual family wants to simplify as a system, not just by one knob |
+
+**Why these five are worth the compute**
+
+- `H1`, `H2`, and `H3` isolate the three main learned-control families directly
+- `H4` asks the stronger topology question instead of only the parameterization question
+- `H5` is the one justified combo run because residual controls are likely to interact
+
+**Decision rule for H**
+
+- if `H1` wins, the next residual tranche should focus on input-stream mixing and residual routing
+- if `H2` wins, the next residual tranche should simplify control parameterization further
+- if `H3` wins but `H4` loses, keep skips but stop learning their weights
+- if `H4` wins, skip topology is now a serious simplification target
+- if `H5` wins, the residual family likely wants a broader simplification pass
+- if all five lose clearly, residual controls are probably not the next bottleneck and we should pivot elsewhere

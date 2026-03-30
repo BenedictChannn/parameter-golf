@@ -69,6 +69,10 @@ class Hyperparameters:
     tie_embeddings = bool(int(os.environ.get("TIE_EMBEDDINGS", "1")))
     rope_base = float(os.environ.get("ROPE_BASE", 10000.0))
     logit_softcap = float(os.environ.get("LOGIT_SOFTCAP", 30.0))
+    use_resid_mix = bool(int(os.environ.get("USE_RESID_MIX", "1")))
+    use_attn_scale = bool(int(os.environ.get("USE_ATTN_SCALE", "1")))
+    use_mlp_scale = bool(int(os.environ.get("USE_MLP_SCALE", "1")))
+    skip_mode = os.environ.get("SKIP_MODE", "learned")
 
     # Optimizer hyperparameters.
     embed_lr = float(os.environ.get("EMBED_LR", 0.6))
@@ -636,25 +640,38 @@ class Block(nn.Module):
         mlp_mult: int,
         rope_base: float,
         qk_gain_init: float,
+        use_resid_mix: bool,
+        use_attn_scale: bool,
+        use_mlp_scale: bool,
     ):
         super().__init__()
         self.attn_norm = RMSNorm()
         self.mlp_norm = RMSNorm()
         self.attn = CausalSelfAttention(dim, num_heads, num_kv_heads, rope_base, qk_gain_init)
         self.mlp = MLP(dim, mlp_mult)
-        self.attn_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32))
-        self.mlp_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32))
-        self.resid_mix = nn.Parameter(torch.stack((torch.ones(dim), torch.zeros(dim))).float())
+        self.attn_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32)) if use_attn_scale else None
+        self.mlp_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32)) if use_mlp_scale else None
+        self.resid_mix = (
+            nn.Parameter(torch.stack((torch.ones(dim), torch.zeros(dim))).float()) if use_resid_mix else None
+        )
 
     def forward(self, x: Tensor, x0: Tensor, q_delta_fn=None, v_delta_fn=None) -> Tensor:
-        mix = self.resid_mix.to(dtype=x.dtype)
-        x = mix[0][None, None, :] * x + mix[1][None, None, :] * x0
+        if self.resid_mix is not None:
+            mix = self.resid_mix.to(dtype=x.dtype)
+            x = mix[0][None, None, :] * x + mix[1][None, None, :] * x0
         n = self.attn_norm(x)
         qd = q_delta_fn(n) if q_delta_fn is not None else None
         vd = v_delta_fn(n) if v_delta_fn is not None else None
         attn_out = self.attn(n, qd, vd)
-        x = x + self.attn_scale.to(dtype=x.dtype)[None, None, :] * attn_out
-        x = x + self.mlp_scale.to(dtype=x.dtype)[None, None, :] * self.mlp(self.mlp_norm(x))
+        if self.attn_scale is None:
+            x = x + attn_out
+        else:
+            x = x + self.attn_scale.to(dtype=x.dtype)[None, None, :] * attn_out
+        mlp_out = self.mlp(self.mlp_norm(x))
+        if self.mlp_scale is None:
+            x = x + mlp_out
+        else:
+            x = x + self.mlp_scale.to(dtype=x.dtype)[None, None, :] * mlp_out
         return x
 
 
@@ -672,18 +689,29 @@ class GPT(nn.Module):
         logit_softcap: float,
         rope_base: float,
         qk_gain_init: float,
+        use_resid_mix: bool,
+        use_attn_scale: bool,
+        use_mlp_scale: bool,
+        skip_mode: str,
     ):
         super().__init__()
         if logit_softcap <= 0.0:
             raise ValueError(f"logit_softcap must be positive, got {logit_softcap}")
+        if skip_mode not in {"learned", "unit", "off"}:
+            raise ValueError(f"skip_mode must be one of learned|unit|off, got {skip_mode}")
         self.tie_embeddings = tie_embeddings
         self.tied_embed_init_std = tied_embed_init_std
         self.logit_softcap = logit_softcap
+        self.skip_mode = skip_mode
         self.tok_emb = nn.Embedding(vocab_size, model_dim)
         self.num_encoder_layers = num_layers // 2
         self.num_decoder_layers = num_layers - self.num_encoder_layers
         self.num_skip_weights = min(self.num_encoder_layers, self.num_decoder_layers)
-        self.skip_weights = nn.Parameter(torch.ones(self.num_skip_weights, model_dim, dtype=torch.float32))
+        self.skip_weights = (
+            nn.Parameter(torch.ones(self.num_skip_weights, model_dim, dtype=torch.float32))
+            if self.skip_mode == "learned"
+            else None
+        )
         self.blocks = nn.ModuleList(
             [
                 Block(
@@ -693,6 +721,9 @@ class GPT(nn.Module):
                     mlp_mult,
                     rope_base,
                     qk_gain_init,
+                    use_resid_mix,
+                    use_attn_scale,
+                    use_mlp_scale,
                 )
                 for i in range(num_layers)
             ]
@@ -725,7 +756,11 @@ class GPT(nn.Module):
         for i in range(self.num_decoder_layers):
             bi = self.num_encoder_layers + i
             if skips:
-                x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skips.pop()
+                skip = skips.pop()
+                if self.skip_mode == "learned":
+                    x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skip
+                elif self.skip_mode == "unit":
+                    x = x + skip
             qd = lora.q_loras[bi] if lora else None
             vd = lora.v_loras[bi] if lora else None
             x = self.blocks[bi](x, x0, qd, vd)
@@ -1065,6 +1100,10 @@ def main() -> None:
         logit_softcap=args.logit_softcap,
         rope_base=args.rope_base,
         qk_gain_init=args.qk_gain_init,
+        use_resid_mix=args.use_resid_mix,
+        use_attn_scale=args.use_attn_scale,
+        use_mlp_scale=args.use_mlp_scale,
+        skip_mode=args.skip_mode,
     ).to(device).bfloat16()
     for module in base_model.modules():
         if isinstance(module, CastedLinear):
@@ -1091,7 +1130,7 @@ def main() -> None:
         for name, p in block_named_params
         if p.ndim < 2 or any(pattern in name for pattern in CONTROL_TENSOR_NAME_PATTERNS)
     ]
-    if base_model.skip_weights.numel() > 0:
+    if base_model.skip_weights is not None and base_model.skip_weights.numel() > 0:
         scalar_params.append(base_model.skip_weights)
     token_lr = args.tied_embed_lr if args.tie_embeddings else args.embed_lr
     optimizer_tok = torch.optim.Adam(
@@ -1133,6 +1172,10 @@ def main() -> None:
         f"tie_embeddings:{args.tie_embeddings} embed_lr:{token_lr} "
         f"head_lr:{args.head_lr if base_model.lm_head is not None else 0.0} "
         f"matrix_lr:{args.matrix_lr} scalar_lr:{args.scalar_lr}"
+    )
+    log0(
+        f"control_modes:resid_mix={args.use_resid_mix} attn_scale={args.use_attn_scale} "
+        f"mlp_scale={args.use_mlp_scale} skip_mode={args.skip_mode}"
     )
     log0(
         f"train_batch_tokens:{args.train_batch_tokens} train_seq_len:{args.train_seq_len} "

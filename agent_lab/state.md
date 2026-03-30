@@ -22,9 +22,9 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Active Tranche
 
-- Tranche: [`T-20260330-G`](./tranches.md#t-20260330-g-untied-output-local-calibration)
-- Goal: test whether the current best untied-output line still has local output-path headroom nearby before we pivot to a colder family
-- Status: completed
+- Tranche: [`T-20260330-H`](./tranches.md#t-20260330-h-residual-control-simplification)
+- Goal: test whether the current best line is carrying unnecessary residual-control and skip-path complexity
+- Status: in progress
 
 ## Working Beliefs
 
@@ -63,21 +63,22 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Faster head LR on the untied + softcap20 line is the new best result so far. `HEAD_LR=0.012` beat both the default and slower-head-LR variants, so output-head learning dynamics are a real follow-on lever rather than noise.
 - The next compute-worthy question is a narrow one: whether the local output-path optimum sits slightly above, below, or exactly at the current `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012`.
 - Tranche G mostly closed that loop. Nearby scalar moves around `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012` did not produce a clear new winner, so the local output neighborhood now looks mostly mapped.
+- The next best family is now residual controls and skip topology. These are still distinctive to this script and are now exposed cleanly enough to test with env vars.
 
 ## Open Questions
 
-- Are the residual controls or skip paths now the cleanest next component family to attack?
-- Should the next tranche test simplification first, or local retuning of those controls around the current best anchor?
-- Is there still any value in a deeper output-path mechanism change, or is the current output family better treated as “good enough for now”?
+- Does removing `resid_mix` help, hurt, or do almost nothing on the current best line?
+- Are learned residual scales necessary, or would plain unit residuals work as well or better?
+- Is the skip topology itself helpful, or only the fact that the model has another residual path?
+- Do these simplifications stack cleanly, or does only one of them matter?
 
 ## Next Planned Runs
 
-- Tranche G takeaway:
-- the new manifest runner completed a full 5-run tranche successfully
-- the per-run summary path produced usable scientific closeout material
-- the best local output-path point still appears to be `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012`
-- likely next compute-worthy pivot:
-- residual-control and skip-topology simplification from the current best anchor
+- `H1`: `USE_RESID_MIX=0`
+- `H2`: `USE_ATTN_SCALE=0, USE_MLP_SCALE=0`
+- `H3`: `SKIP_MODE=unit`
+- `H4`: `SKIP_MODE=off`
+- `H5`: `USE_RESID_MIX=0, USE_ATTN_SCALE=0, USE_MLP_SCALE=0, SKIP_MODE=unit`
 
 ## Go Deeper
 

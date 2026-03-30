@@ -26,13 +26,22 @@ RUN_ID=... DATA_PATH=./data/datasets/fineweb10B_sp1024/ TOKENIZER_PATH=./data/to
 
 **Prefer env vars first** for pure hyperparameter, schedule, and runtime sweeps. The script already exposes the main knobs under `Hyperparameters`, and env-driven runs keep the baseline branch cleaner.
 
-When a tranche is already defined cleanly, prefer a manifest plus:
+When a tranche is already defined cleanly, you may use a manifest plus:
 
 ```bash
 python3 scripts/agent_lab/run_tranche.py agent_lab/tranche_manifests/<manifest>.json
 ```
 
 Dry-run first. Use `--execute` only when the tranche is approved and ready to burn compute.
+
+Important: the manifest runner is a support tool, not the scientist. The preferred operating model in this repo is still chat-led research:
+
+- launch one run or a tightly scoped mini-tranche
+- monitor it actively
+- synthesize the result in chat
+- decide the next run or tranche from the result
+
+Use `run_tranche.py` when it helps with execution, but do not let it replace tranche-to-tranche scientific judgment.
 
 **CAN:** set env vars freely for experiments; edit **`agent_lab/train_gpt.py`** only when the hypothesis requires a real code-path change.
 
@@ -123,6 +132,12 @@ Branch: `agent_lab/<tag>` or `agent_lab/<tag>-gpu0`.
 10. Regenerate the visual dashboard with `python3 scripts/agent_lab/plot_experiments.py` when the ledger changes.
 11. Refresh `budget_report.md` with `python3 scripts/agent_lab/analyze_budget.py ...` when a new frontier shape materially changes component costs.
 12. Better `val_bpb` or a clearly informative result → keep the branch history and log the lesson. Revert only when the change does not deserve to stay as part of the tree.
+
+Default rhythm:
+
+- one actively monitored run at a time
+- or a very small tranche when the next few runs are already obviously justified
+- after each result, stop and think before committing to the next branch
 
 **Timeout:** if wall time ≫ **2×** `MAX_WALLCLOCK_SECONDS` + eval slack (e.g. >25 min at 600s cap), kill → discard, revert.
 
