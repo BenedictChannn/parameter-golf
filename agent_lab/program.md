@@ -10,7 +10,7 @@ Do not change tokenizer/byte accounting, validation split, or `eval_val` semanti
 4. Ensure `DATA_PATH` shards and `TOKENIZER_PATH` exist; else tell human to run `python3 data/cached_challenge_fineweb.py` per main README.
 5. Create **`agent_lab/results.tsv`** with header only (see Logging).
 6. Read **`agent_lab/experiments.tsv`** (what’s already been tried; stable IDs **`AL-YYYYMMDD-NNN`**).
-7. Read **`agent_lab/state.md`**, **`agent_lab/tranches.md`**, and **`agent_lab/ideas.md`** so the next run sits inside an explicit research program rather than only local intuition.
+7. Read **`agent_lab/state.md`**, **`agent_lab/findings.md`**, **`agent_lab/tranches.md`**, and **`agent_lab/ideas.md`** so the next run sits inside an explicit research program rather than only local intuition.
 8. After human confirms, start the loop.
 
 ## Experimentation
@@ -25,6 +25,14 @@ RUN_ID=... DATA_PATH=./data/datasets/fineweb10B_sp1024/ TOKENIZER_PATH=./data/to
 `MAX_WALLCLOCK_SECONDS`: default **600** (`Hyperparameters`). For record-track-comparable experiments, use the full **600s** training budget and do not exceed it. Shorter runs are fine for smoke tests or explicit proxy experiments, but do not compare them directly against the 600s line unless documented as a proxy.
 
 **Prefer env vars first** for pure hyperparameter, schedule, and runtime sweeps. The script already exposes the main knobs under `Hyperparameters`, and env-driven runs keep the baseline branch cleaner.
+
+When a tranche is already defined cleanly, prefer a manifest plus:
+
+```bash
+python3 scripts/agent_lab/run_tranche.py agent_lab/tranche_manifests/<manifest>.json
+```
+
+Dry-run first. Use `--execute` only when the tranche is approved and ready to burn compute.
 
 **CAN:** set env vars freely for experiments; edit **`agent_lab/train_gpt.py`** only when the hypothesis requires a real code-path change.
 
@@ -88,10 +96,12 @@ Do not commit `results.tsv`.
 **Also maintain the prose memory surfaces**:
 
 - [`agent_lab/state.md`](state.md): high-level dashboard, current best, working beliefs, and next runs
+- [`agent_lab/findings.md`](findings.md): durable conclusions with evidence and falsification paths
 - [`agent_lab/tranches.md`](tranches.md): tranche goals, controls, branch structure, and conclusions
 - [`agent_lab/ideas.md`](ideas.md): candidate and active hypotheses, with links back to experiments and logs
+- [`agent_lab/budget_report.md`](budget_report.md): current component-budget snapshot
 
-Treat these as the lab's short command surfaces. A later session should be able to read `state.md`, understand the active tranche, and drill down into the exact evidence without reconstructing the whole story from scratch.
+Treat these as the lab's short command surfaces. A later session should be able to read `state.md` and `findings.md`, understand the active tranche, and drill down into the exact evidence without reconstructing the whole story from scratch.
 
 **Commits:** use **Conventional Commits** with scope `agent-lab` and a **rich body** (`Exp:`, `Parent:`, `Hypothesis:`, `Result:`). See [`.cursor/skills/agent-lab/SKILL.md`](../.cursor/skills/agent-lab/SKILL.md) (**Commit conventions** + official time limits).
 
@@ -108,9 +118,11 @@ Branch: `agent_lab/<tag>` or `agent_lab/<tag>-gpu0`.
 5. `grep '^final_int8_ttt_lora\|^peak memory allocated' agent_lab/run.log` (adjust grep if you chose the zlib metric).
 6. Empty primary line → likely crash → `tail -n 80 agent_lab/run.log`; fix trivial errors or log `crash` and revert.
 7. Append TSV row.
-8. Update `state.md`, `tranches.md`, and `ideas.md` so the high-level research view stays synchronized with the exact run ledger.
-9. Regenerate the visual dashboard with `python3 scripts/agent_lab/plot_experiments.py` when the ledger changes.
-10. Better `val_bpb` or a clearly informative result → keep the branch history and log the lesson. Revert only when the change does not deserve to stay as part of the tree.
+8. Parse the finished log with `python3 scripts/agent_lab/summarize_run.py ...` and reuse its output instead of hand-copying metrics.
+9. Update `state.md`, `findings.md`, `tranches.md`, and `ideas.md` so the high-level research view stays synchronized with the exact run ledger.
+10. Regenerate the visual dashboard with `python3 scripts/agent_lab/plot_experiments.py` when the ledger changes.
+11. Refresh `budget_report.md` with `python3 scripts/agent_lab/analyze_budget.py ...` when a new frontier shape materially changes component costs.
+12. Better `val_bpb` or a clearly informative result → keep the branch history and log the lesson. Revert only when the change does not deserve to stay as part of the tree.
 
 **Timeout:** if wall time ≫ **2×** `MAX_WALLCLOCK_SECONDS` + eval slack (e.g. >25 min at 600s cap), kill → discard, revert.
 

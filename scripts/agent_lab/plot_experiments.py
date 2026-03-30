@@ -365,20 +365,24 @@ def _scale(value: float, low: float, high: float, out_low: float, out_high: floa
 
 def _notes_block(x: int, y: int, best: Experiment, experiments: list[Experiment]) -> str:
     latest = experiments[-1]
+    delta = latest.val_bpb - best.val_bpb
     lines = [
         f"Current best: {best.exp_id} at {best.val_bpb:.4f} val_bpb.",
         f"Latest run: {latest.exp_id} ({latest.status}) tested {latest.hypothesis}.",
+        f"Latest delta vs best: {delta:+.4f} val_bpb.",
         "Read agent_lab/state.md for the live dashboard and agent_lab/tranches.md for the tranche map.",
     ]
     block = [
-        f'<rect x="{x}" y="{y}" width="{SVG_WIDTH - 80}" height="72" rx="14" fill="#fffdf8" stroke="#d6d3d1"/>',
+        f'<rect x="{x}" y="{y}" width="{SVG_WIDTH - 80}" height="88" rx="14" fill="#fffdf8" stroke="#d6d3d1"/>',
     ]
     for i, line in enumerate(lines):
         block.append(f'<text x="{x + 20}" y="{y + 24 + i * 18}" class="body">{_escape(line)}</text>')
     return "".join(block)
 
 
-def render_html(svg_filename: str) -> str:
+def render_html(svg_filename: str, experiments: list[Experiment]) -> str:
+    best_runs = sorted(experiments, key=lambda exp: exp.val_bpb)[:8]
+    keep_runs = [exp for exp in experiments if exp.status == "keep"][-8:]
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -410,11 +414,39 @@ def render_html(svg_filename: str) -> str:
       border: 1px solid #d6d3d1;
       border-radius: 18px;
       overflow: hidden;
+      margin-bottom: 20px;
     }}
     img {{
       display: block;
       width: 100%;
       height: auto;
+    }}
+    .grid {{
+      display: grid;
+      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    }}
+    .card {{
+      background: white;
+      border: 1px solid #d6d3d1;
+      border-radius: 18px;
+      padding: 16px 18px;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }}
+    th, td {{
+      text-align: left;
+      padding: 8px 0;
+      border-bottom: 1px solid #eee7dc;
+    }}
+    th {{
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #6b7280;
     }}
   </style>
 </head>
@@ -426,10 +458,39 @@ def render_html(svg_filename: str) -> str:
     <div class="frame">
       <img src="{html.escape(svg_filename)}" alt="Experiment dashboard">
     </div>
+    <div class="grid">
+      <section class="card">
+        <h2>Top Runs</h2>
+        {_render_html_table(best_runs)}
+      </section>
+      <section class="card">
+        <h2>Recent Keeps</h2>
+        {_render_html_table(keep_runs)}
+      </section>
+    </div>
   </main>
 </body>
 </html>
 """
+
+
+def _render_html_table(experiments: list[Experiment]) -> str:
+    if not experiments:
+        return "<p>No runs available yet.</p>"
+    rows = [
+        "<table><thead><tr><th>Exp</th><th>val_bpb</th><th>Status</th><th>Notes</th></tr></thead><tbody>"
+    ]
+    for exp in experiments:
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(exp.exp_id)}</td>"
+            f"<td>{exp.val_bpb:.4f}</td>"
+            f"<td>{html.escape(exp.status)}</td>"
+            f"<td>{html.escape(exp.notes[:88])}</td>"
+            "</tr>"
+        )
+    rows.append("</tbody></table>")
+    return "".join(rows)
 
 
 def _escape(text: str) -> str:
@@ -451,7 +512,7 @@ def main() -> None:
     html_path = out_dir / "experiments.html"
 
     svg_path.write_text(render_dashboard(experiments), encoding="utf-8")
-    html_path.write_text(render_html(svg_path.name), encoding="utf-8")
+    html_path.write_text(render_html(svg_path.name, experiments), encoding="utf-8")
     print(f"Wrote {svg_path}")
     print(f"Wrote {html_path}")
 

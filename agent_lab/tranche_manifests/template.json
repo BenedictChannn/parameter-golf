@@ -1,0 +1,28 @@
+{
+  "tranche_id": "T-YYYYMMDD-X",
+  "title": "Template tranche",
+  "research_question": "Replace this with the question the tranche is trying to answer.",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-YYYYMMDD-NNN",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337"
+  },
+  "candidates": [
+    {
+      "name": "candidate-one",
+      "exp_id": "AL-YYYYMMDD-NNN",
+      "hypothesis": "State the expected mechanism before the run.",
+      "description": "Short description for results.tsv.",
+      "env": {
+        "NUM_HEADS": "4"
+      }
+    }
+  ]
+}

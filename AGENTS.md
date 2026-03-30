@@ -46,6 +46,7 @@ For autonomous agent-lab work:
 - maintain `[agent_lab/state.md](./agent_lab/state.md)` as the first-read dashboard
 - maintain `[agent_lab/tranches.md](./agent_lab/tranches.md)` as the research-program map
 - maintain `[agent_lab/ideas.md](./agent_lab/ideas.md)` as the hypothesis bank
+- maintain `[agent_lab/findings.md](./agent_lab/findings.md)` as the durable conclusion log
 - update the active dated log in `[docs/build-logs/](./docs/build-logs/)`
 
 ## Memory Model
@@ -55,7 +56,9 @@ Use the research memory system as a dashboard plus drill-down chain:
 - [`agent_lab/state.md`](./agent_lab/state.md) answers what is true right now, what matters, and what is next
 - [`agent_lab/tranches.md`](./agent_lab/tranches.md) answers why the current family of experiments exists and when to pivot
 - [`agent_lab/ideas.md`](./agent_lab/ideas.md) answers which hypotheses are active, parked, or waiting for evidence
+- [`agent_lab/findings.md`](./agent_lab/findings.md) answers which conclusions the lab currently believes are durable enough to reason from directly
 - [`agent_lab/experiments.tsv`](./agent_lab/experiments.tsv) answers what exact runs happened
+- [`agent_lab/budget_report.md`](./agent_lab/budget_report.md) answers where params and bytes are currently being spent
 - [`docs/build-logs/`](./docs/build-logs/) contains the long-form reasoning, surprises, and evidence trail
 
 Keep the summary surfaces short and linked outward. Do not bury the control state inside a single long build log.
@@ -127,7 +130,8 @@ Before autonomous work, read:
 2. `[agent_lab/README.md](./agent_lab/README.md)`
 3. `[agent_lab/program.md](./agent_lab/program.md)`
 4. `[agent_lab/state.md](./agent_lab/state.md)`
-5. `[agent_lab/tranches.md](./agent_lab/tranches.md)`
-6. `[agent_lab/ideas.md](./agent_lab/ideas.md)`
-7. `[agent_lab/experiments.tsv](./agent_lab/experiments.tsv)`
-8. `[.cursor/rules/parameter-golf.mdc](./.cursor/rules/parameter-golf.mdc)`
+5. `[agent_lab/findings.md](./agent_lab/findings.md)`
+6. `[agent_lab/tranches.md](./agent_lab/tranches.md)`
+7. `[agent_lab/ideas.md](./agent_lab/ideas.md)`
+8. `[agent_lab/experiments.tsv](./agent_lab/experiments.tsv)`
+9. `[.cursor/rules/parameter-golf.mdc](./.cursor/rules/parameter-golf.mdc)`

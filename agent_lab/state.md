@@ -86,5 +86,7 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - Idea bank: [`ideas.md`](./ideas.md)
 - Architecture audit: [`architecture_review.md`](./architecture_review.md)
 - Experiment dashboard: [`plots/experiments.html`](./plots/experiments.html)
+- Durable findings: [`findings.md`](./findings.md)
+- Current budget report: [`budget_report.md`](./budget_report.md)
 - Experiment ledger: [`experiments.tsv`](./experiments.tsv)
-- Latest narrative log: [`docs/build-logs/2026-03-29-agent-lab.md`](../docs/build-logs/2026-03-29-agent-lab.md)
+- Latest narrative log: [`docs/build-logs/2026-03-30-agent-lab.md`](../docs/build-logs/2026-03-30-agent-lab.md)
