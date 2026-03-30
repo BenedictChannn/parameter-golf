@@ -615,7 +615,7 @@ Are `resid_mix`, learned residual scales, and learned skip weights still helping
 
 ## T-20260330-I: Latent-KV Attention Audit
 
-**Status:** active
+**Status:** completed
 
 **Goal**  
 Test whether the current attention block is over-spending on full K/V structure, and whether a latent-KV bottleneck can preserve quality while buying speed or size headroom.
@@ -649,13 +649,36 @@ Can compressed K/V structure keep most of the useful attention behavior under th
 | `I2` | `LATENT_KV_LAYERS=0,1,2,3,4,5,6,7,8`, `LATENT_KV_DIM=64` | Stronger latent-KV compression across all layers | The frontier may tolerate much more K/V compression than we expect | Whether the idea scales beyond a mild bottleneck |
 | `I3` | `LATENT_KV_LAYERS=5,6,7,8`, `LATENT_KV_DIM=64` | Compress only the upper layers | Later layers may tolerate K/V compression better than earlier ones | Whether late compression is the cleanest placement |
 | `I4` | `LATENT_KV_LAYERS=0,1,2,3`, `LATENT_KV_DIM=64` | Compress only the lower layers | Early layers may be the cheaper place to simplify attention while preserving later fidelity | Whether early compression is the cleanest placement |
-| `I5` | `NUM_LAYERS=10`, `LATENT_KV_LAYERS=0,1,2,3,4,5,6,7,8,9`, `LATENT_KV_DIM=128` | Reinvest latent-KV savings into more depth | Latent-KV may only win if the saved budget is spent on extra transformations rather than taken as free efficiency | Whether compressed attention plus extra depth beats the plain transformer frontier |
+| `I5` | `NUM_LAYERS=10`, `LATENT_KV_LAYERS=0,1,2,3,4,5,6,7,8,9`, `LATENT_KV_DIM=64` | Reinvest the stronger latent-KV savings into more depth | The stronger compression line may only make sense if its saved budget is converted into one more layer | Whether stronger compressed attention plus extra depth beats the plain transformer frontier |
 
 **Why these five are worth the compute**
 
 - every run tests a distinct mechanism-level question, not a scalar retune
 - the tranche asks both whether latent-KV works and where it works
 - `I5` tests the most important second-order question: what to do with the savings if the idea works
+
+**Results so far**
+
+- [`AL-20260330-011`](./experiments.tsv) (`I1`, all-layer `LATENT_KV_DIM=128`) landed at `1.3718` and 15.83 MB. The run trained cleanly, stayed under the size cap, and kept roughly the same step budget as the anchor, but it still lost clearly on quality. It also took `801s` for TTT eval, so the first latent-KV form did not buy a cleaner evaluation path either.
+- [`AL-20260330-012`](./experiments.tsv) (`I2`, all-layer `LATENT_KV_DIM=64`) landed at `1.3865` and 14.73 MB. It bought slightly more steps and much more artifact headroom than `I1`, but it lost further on quality and still took `795s` in TTT eval.
+- [`AL-20260330-013`](./experiments.tsv) (`I3`, upper-only `LATENT_KV_DIM=64`) landed at `1.3685` and 15.32 MB. This was the best latent-KV run in the tranche: clearly better than both all-layer variants, but still well behind the `1.3564` frontier.
+- [`AL-20260330-014`](./experiments.tsv) (`I4`, lower-only `LATENT_KV_DIM=64`) landed at `1.3737` and 15.30 MB. This improved over all-layer latent64 but trailed the upper-only placement, so the upper stack is the cleaner place to localize compression.
+- [`AL-20260330-015`](./experiments.tsv) (`I5`, `10L` + all-layer `LATENT_KV_DIM=64`) landed at `1.3883` and 15.84 MB. Reinvesting the stronger all-layer compression into another layer did not rescue the family; it lost too many steps and still stayed weak on quality.
+
+**Current reading**
+
+- latent-KV is technically viable in this codebase: the model trains, serializes, quantizes, and evaluates without breaking challenge constraints
+- but mild all-layer latent-KV is not an immediate drop-in win
+- stronger all-layer compression makes the loss worse, not better
+- the family is placement-sensitive: upper-only compression is meaningfully better than lower-only or all-layer compression
+- reinvesting naive all-layer compression into extra depth does not rescue it
+
+**Outcome**
+
+- no new frontier run; [`AL-20260329-030`](./experiments.tsv) remains best at `1.3564`
+- best latent-KV run: [`AL-20260330-013`](./experiments.tsv) at `1.3685`
+- main conclusion: latent-KV is not a dead idea, but its first useful regime is localized upper-layer compression, not full-stack compression
+- next pivot: move to a new bold architecture family unless we decide the upper-only latent-KV line is worth a second-generation redesign
 
 ## T-20260330-J: Hybrid Sequence Mixer Audit
 
@@ -700,3 +723,49 @@ Does every layer really need full attention, or can a hybrid stack keep most of 
 - every run tests a distinct placement theory rather than a scalar retune
 - the tranche asks a real architectural question: where, if anywhere, can attention be replaced?
 - if all five lose, that still teaches us something strong about the current frontier
+
+## Queued Manifest Roadmap
+
+These are the next six tranche manifests prepared for the lab. `T-20260330-J` is runnable with the current codebase. The others live under [`tranche_manifests/planned/`](./tranche_manifests/planned) and should only be executed after their code surfaces exist.
+
+### T-20260330-J - Hybrid Sequence Mixer Audit
+
+- Manifest: [`20260330-J-hybrid-sequence-mixer.json`](./tranche_manifests/20260330-J-hybrid-sequence-mixer.json)
+- Why it is worthy:
+- it tests whether some layers can stop using full attention entirely
+- it is the cleanest bold replacement family already supported by the repo
+
+### T-20260330-K - Output Head Architecture Audit
+
+- Manifest: [`20260330-K-output-head-architecture.json`](./tranche_manifests/planned/20260330-K-output-head-architecture.json)
+- Why it is worthy:
+- output path has already produced some of the largest gains in the project
+- the next good question is output-head architecture, not more scalar tuning
+
+### T-20260330-L - Local-Global Attention Split
+
+- Manifest: [`20260330-L-local-global-attention.json`](./tranche_manifests/planned/20260330-L-local-global-attention.json)
+- Why it is worthy:
+- attention geometry already mattered a lot
+- the next structural question is whether global attention is needed in every layer
+
+### T-20260330-M - Skip and Residual Redesign
+
+- Manifest: [`20260330-M-skip-residual-redesign.json`](./tranche_manifests/planned/20260330-M-skip-residual-redesign.json)
+- Why it is worthy:
+- tranche H showed deletion is mostly the wrong question
+- the live path is redesigning routing, not removing it
+
+### T-20260330-N - Mechanism-Specific Learning Rates
+
+- Manifest: [`20260330-N-mechanism-specific-lrs.json`](./tranche_manifests/planned/20260330-N-mechanism-specific-lrs.json)
+- Why it is worthy:
+- some architecture failures may actually be optimization failures
+- this gives future bold mechanisms a fairer training regime
+
+### T-20260330-O - Quantization-Aware Warmdown
+
+- Manifest: [`20260330-O-quantization-aware-warmdown.json`](./tranche_manifests/planned/20260330-O-quantization-aware-warmdown.json)
+- Why it is worthy:
+- the submitted model is compressed, not the raw fp model
+- challenge-specific end-of-training behavior may matter more than generic schedule quality

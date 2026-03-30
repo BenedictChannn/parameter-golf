@@ -22,9 +22,9 @@ This is the first-read dashboard for autonomous research. Read this file for the
 
 ## Active Tranche
 
-- Tranche: [`T-20260330-I`](./tranches.md#t-20260330-i-latent-kv-attention-audit)
-- Goal: test whether the current attention block is over-spending on full K/V structure
-- Status: in progress
+- Tranche: none
+- Goal: synthesize tranche I and choose the next bold architecture family
+- Status: ready to pivot
 
 ## Working Beliefs
 
@@ -70,20 +70,26 @@ This is the first-read dashboard for autonomous research. Read this file for the
 - The fourth residual-control probe clarified that story. `SKIP_MODE=off` lost much more clearly than `SKIP_MODE=unit`, so the skip topology itself is useful and the learned weighting looks like the softer target.
 - The full simplification package failed hard. `H5` did not reveal a hidden interaction win, so there is no sign that residual simplification becomes good when stacked together.
 - Tranche H overall says: do not spend the next tranche on generic residual simplification. The only live lesson is that unit skip weights are almost free, while the skip topology itself should stay.
+- Mild all-layer latent-KV compression is not a free win. [`AL-20260330-011`](./experiments.tsv) stayed valid and train-stable, but it regressed to `1.3718`, so full K/V structure is not obviously redundant on the current frontier.
+- Latent-KV also did not buy an evaluation-speed win in its first form. `AL-20260330-011` took `801s` in TTT, which is effectively the same slow band as the recent transformer frontier rather than a cleaner eval path.
+- Stronger all-layer latent-KV made the quality trade worse, not better. [`AL-20260330-012`](./experiments.tsv) bought a little more step budget and over 1 MB more artifact headroom than `I1`, but regressed further to `1.3865`.
+- The local tranche-I baseline now says the main issue is probably not “latent-KV needs to be stronger.” It is more likely “all-layer compression is the wrong placement.”
+- Upper-only latent-KV is the best version of the family so far. [`AL-20260330-013`](./experiments.tsv) improved materially over all-layer latent64 and beat lower-only compression, which means the mechanism is placement-sensitive rather than simply dead.
+- Lower-only latent-KV is weaker than upper-only latent-KV. [`AL-20260330-014`](./experiments.tsv) still beat all-layer latent64, but it gave back more quality, so the upper stack looks like the cleaner place to compress K/V.
+- Reinvesting all-layer latent64 savings into a tenth layer did not rescue the idea. [`AL-20260330-015`](./experiments.tsv) lost steps, lost quality, and lost eval time, so naive “compress harder everywhere, then add depth” is not the right latent-KV recipe.
+- Tranche I overall says latent-KV is not a dead mechanism, but it is not a direct frontier win either. The family only became plausible when localized, and even then it stayed clearly behind the current best line.
 
 ## Open Questions
 
-- Can mild latent-KV compression across all layers stay close to the frontier?
-- If strong latent-KV loses, is it because all-layer compression is too aggressive, or because the wrong part of the stack is being compressed?
-- If latent-KV buys real savings, is the best use of those savings extra depth?
+- Is upper-only latent-KV strong enough to deserve a second-generation design, or is the family still too far behind the frontier?
+- Is the next bold step better spent on hybrid mixer layers, output-head architecture, or local-global attention?
+- Which queued architecture tranche has the highest chance of teaching us something new, not just moving numbers slightly?
 
 ## Next Planned Runs
 
-- `I1`: all-layer latent-KV with `LATENT_KV_DIM=128`
-- `I2`: all-layer latent-KV with `LATENT_KV_DIM=64`
-- `I3`: upper-layer latent-KV with `LATENT_KV_DIM=64`
-- `I4`: lower-layer latent-KV with `LATENT_KV_DIM=64`
-- `I5`: all-layer latent-KV `128` plus `10` layers
+- next tranche candidate: hybrid sequence mixer layers
+- next tranche candidate: output head architecture
+- next tranche candidate: local-global attention split
 
 ## Go Deeper
 

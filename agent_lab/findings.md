@@ -145,3 +145,74 @@ Use [`state.md`](./state.md) for the live dashboard, [`ideas.md`](./ideas.md) fo
 - `AL-20260330-008` means one narrow simplification path is still alive if we later want a cleaner skip parameterization.
 - Next falsification:
 - revisit only if a more radical architecture change makes the residual system play a different role.
+
+## F-20260330-012: Mild All-Layer Latent-KV Is Viable but Not a Drop-In Win
+
+- Claim: mild all-layer latent-KV compression is technically viable in this repo, but it does not preserve enough quality to challenge the current frontier as a direct replacement for full K/V attention.
+- Confidence: medium
+- Evidence:
+- [`AL-20260330-011`](./experiments.tsv) trained cleanly, stayed under the size cap at 15.83 MB, and finished the full TTT pipeline.
+- The final score still regressed clearly from `1.3564` to `1.3718`, so the first mild latent-KV form is not close enough to call a near miss.
+- Counterevidence:
+- this result only tests all-layer compression at `LATENT_KV_DIM=128`; it does not yet tell us whether the real issue is full-stack compression rather than the latent-KV mechanism itself.
+- Next falsification:
+- test whether stronger compression simply makes the loss worse (`I2`) or whether localized upper/lower placement (`I3`/`I4`) preserves more quality than all-layer compression.
+
+## F-20260330-013: The First Latent-KV Form Did Not Buy a Cleaner Eval Path
+
+- Claim: the first latent-KV design does not appear to improve the expensive TTT evaluation path, which weakens its value proposition for this challenge.
+- Confidence: low-medium
+- Evidence:
+- [`AL-20260330-011`](./experiments.tsv) took `801s` for TTT eval, which sits in the same slow band as the recent frontier runs rather than obviously improving evaluation throughput.
+- Counterevidence:
+- this is only one latent-KV placement and one latent width; the evaluation cost may depend on where compression is applied rather than the general idea.
+- Next falsification:
+- compare TTT eval times and scores for the stronger all-layer and partial-layer latent-KV runs before concluding the whole family is evaluation-unfriendly.
+
+## F-20260330-014: Stronger All-Layer Latent-KV Makes the Trade Worse
+
+- Claim: if latent-KV is applied across every layer, making the bottleneck stronger buys size headroom and a few extra steps, but the quality trade degrades rather than improving.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260330-012`](./experiments.tsv) improved on `I1` in efficiency terms: it reached `1684` steps instead of `1647` and shrank the artifact from `15.83 MB` to `14.73 MB`.
+- Despite those savings, the final score regressed from [`AL-20260330-011`](./experiments.tsv) `1.3718` to `1.3865`.
+- Counterevidence:
+- this only rules against naive full-stack compression; it does not yet say whether upper-only or lower-only placement can make better use of the latent bottleneck.
+- Next falsification:
+- run the localized placement tests (`I3` and `I4`). If those recover quality, the mechanism is still alive but placement-sensitive.
+
+## F-20260330-015: Latent-KV Is Placement-Sensitive, Not Fully Dead
+
+- Claim: latent-KV is not a useful drop-in replacement for full attention across the whole stack, but it becomes materially better when localized to the upper layers.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260330-013`](./experiments.tsv) improved from `1.3865` to `1.3685` relative to the all-layer latent64 baseline.
+- [`AL-20260330-014`](./experiments.tsv) also improved over all-layer latent64, but not as much, which makes the upper-only placement the best version of the family so far.
+- Counterevidence:
+- even the best localized result is still clearly behind the frontier at `1.3564`, so the family is not yet submission-competitive.
+- Next falsification:
+- if a second-generation upper-only latent-KV design still cannot close the remaining gap, the family should be deprioritized behind other bold architecture ideas.
+
+## F-20260330-016: Upper-Layer Compression Is Cleaner Than Lower-Layer Compression
+
+- Claim: if K/V compression is used at all, the upper half of the stack is the better place to use it.
+- Confidence: medium
+- Evidence:
+- [`AL-20260330-013`](./experiments.tsv) (`1.3685`) beat [`AL-20260330-014`](./experiments.tsv) (`1.3737`) while staying in the same size band.
+- Both runs improved over all-layer latent64, but the upper-only one recovered more quality.
+- Counterevidence:
+- the difference is meaningful but not huge; more placement patterns would still be needed before calling this fully settled.
+- Next falsification:
+- test a narrower upper-only pattern or a mixed upper-middle pattern if the latent-KV family is revisited.
+
+## F-20260330-017: Extra Depth Does Not Rescue Naive All-Layer Latent-KV
+
+- Claim: the saved headroom from strong all-layer latent-KV does not automatically become useful when spent on one more layer.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260330-015`](./experiments.tsv) lost to both the all-layer latent64 baseline and the localized placements.
+- It gave back much of the saved headroom, dropped from `1684` to `1506` steps, and had the slowest TTT eval in the tranche.
+- Counterevidence:
+- this only tests one reinvestment style: another full-attention layer on top of the same all-layer compression recipe.
+- Next falsification:
+- if reinvestment is revisited, try spending the savings on a different form of capacity rather than plain extra depth.
