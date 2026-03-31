@@ -825,7 +825,7 @@ Is the lower-four-mixer winner best because of the general idea, or is there sti
 
 ## T-20260331-Q: AttnRes-lite Dynamic Depth Routing
 
-**Status:** planned, not yet runnable
+**Status:** queued
 
 **Goal**  
 Test whether fixed residual and skip routing should give way to a small, input-dependent depth-routing module over a few earlier layer states.

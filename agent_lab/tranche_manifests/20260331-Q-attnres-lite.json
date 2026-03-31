@@ -7,7 +7,7 @@
   "results_tsv": "agent_lab/results.tsv",
   "experiments_tsv": "agent_lab/experiments.tsv",
   "anchor_exp_id": "AL-20260330-104",
-  "implementation_status": "planned",
+  "implementation_status": "runnable",
   "fixed_env": {
     "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
     "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
@@ -28,8 +28,8 @@
     "MIXER_KERNEL": "4"
   },
   "notes": [
-    "Planned only. This tranche needs explicit AttnRes-lite code support before it becomes runnable.",
-    "The env keys below are placeholders for the intended design surface and must not be treated as already implemented."
+    "This tranche now has code support. AttnRes-lite mixes a small set of earlier depth states instead of using full all-layer depth attention.",
+    "Current source order is current stream, matched encoder skip, shallow encoder anchor, then x0 if more sources are requested."
   ],
   "candidates": [
     {

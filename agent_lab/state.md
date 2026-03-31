@@ -55,7 +55,7 @@ This is the first-read dashboard for the current research state. Use this for th
 ## Next Planned Runs
 
 - next tranche: `T-20260331-P` hybrid mixer refinement around [`AL-20260330-104`](./experiments.tsv)
-- next tranche: `T-20260331-Q` AttnRes-lite dynamic depth routing (planned, needs code support)
+- next tranche: `T-20260331-Q` AttnRes-lite dynamic depth routing
 - next tranche: `T-20260331-R` architecture-specific schedules on the hybrid mixer winner
 - later backlog: two dedicated MLP exploration tranches, broad-family first and polynomial second
 

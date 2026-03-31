@@ -81,6 +81,9 @@ class Hyperparameters:
     local_attn_layers = os.environ.get("LOCAL_ATTN_LAYERS", "")
     local_attn_window = int(os.environ.get("LOCAL_ATTN_WINDOW", 0))
     mixer_layers = os.environ.get("MIXER_LAYERS", "")
+    attnres_layers = os.environ.get("ATTNRES_LAYERS", "")
+    attnres_num_sources = int(os.environ.get("ATTNRES_NUM_SOURCES", 0))
+    attnres_routing_mode = os.environ.get("ATTNRES_ROUTING_MODE", "token_softmax")
     mixer_dim = int(os.environ.get("MIXER_DIM", 256))
     mixer_kernel = int(os.environ.get("MIXER_KERNEL", 4))
     output_head_mode = os.environ.get("OUTPUT_HEAD_MODE", "auto")
@@ -702,6 +705,32 @@ class CausalSequenceMixer(nn.Module):
         return self.out_proj(y)
 
 
+class AttnResidualLite(nn.Module):
+    def __init__(self, dim: int, max_sources: int, routing_mode: str):
+        super().__init__()
+        if max_sources < 2:
+            raise ValueError(f"attnres_num_sources must be >= 2, got {max_sources}")
+        if routing_mode not in {"token_softmax", "shared_scalar"}:
+            raise ValueError(f"attnres_routing_mode must be token_softmax|shared_scalar, got {routing_mode}")
+        self.max_sources = max_sources
+        self.routing_mode = routing_mode
+        self.router = CastedLinear(dim, max_sources, bias=False)
+
+    def forward(self, x: Tensor, candidates: list[Tensor]) -> Tensor:
+        if not candidates:
+            return x
+        num_sources = min(len(candidates), self.max_sources)
+        if num_sources == 1:
+            return candidates[0]
+        h = F.rms_norm(x, (x.size(-1),))
+        logits = self.router(h)[..., :num_sources]
+        if self.routing_mode == "shared_scalar":
+            logits = logits.mean(dim=1, keepdim=True)
+        weights = logits.softmax(dim=-1)
+        stacked = torch.stack(candidates[:num_sources], dim=-2)
+        return (weights.unsqueeze(-1) * stacked).sum(dim=-2)
+
+
 class MLP(nn.Module):
     # relu^2 MLP from the original modded-nanogpt setup
     def __init__(self, dim: int, mlp_mult: int):
@@ -783,6 +812,9 @@ class Block(nn.Module):
         use_mlp_scale: bool,
         resid_mix_mode: str,
         resid_scale_mode: str,
+        attnres_layers: set[int],
+        attnres_num_sources: int,
+        attnres_routing_mode: str,
         latent_kv_layers: set[int],
         latent_kv_dim: int,
         local_attn_layers: set[int],
@@ -795,6 +827,11 @@ class Block(nn.Module):
         self.attn_norm = RMSNorm()
         self.mlp_norm = RMSNorm()
         self.use_mixer = layer_idx in mixer_layers
+        self.attnres = (
+            AttnResidualLite(dim, attnres_num_sources, attnres_routing_mode)
+            if layer_idx in attnres_layers and attnres_num_sources > 0
+            else None
+        )
         attn_latent_kv_dim = latent_kv_dim if layer_idx in latent_kv_layers and not self.use_mixer else 0
         attn_local_window = local_attn_window if layer_idx in local_attn_layers and not self.use_mixer else 0
         self.attn = None if self.use_mixer else CausalSelfAttention(
@@ -820,7 +857,9 @@ class Block(nn.Module):
         else:
             self.resid_mix = None
 
-    def forward(self, x: Tensor, x0: Tensor, q_delta_fn=None, v_delta_fn=None) -> Tensor:
+    def forward(self, x: Tensor, x0: Tensor, q_delta_fn=None, v_delta_fn=None, attnres_candidates: list[Tensor] | None = None) -> Tensor:
+        if self.attnres is not None and attnres_candidates:
+            x = self.attnres(x, attnres_candidates)
         if self.resid_mix is not None:
             mix = self.resid_mix.to(dtype=x.dtype)
             if mix.ndim == 1:
@@ -867,6 +906,9 @@ class GPT(nn.Module):
         resid_scale_mode: str,
         skip_mode: str,
         skip_link_pattern: str,
+        attnres_layers: set[int],
+        attnres_num_sources: int,
+        attnres_routing_mode: str,
         latent_kv_layers: set[int],
         latent_kv_dim: int,
         local_attn_layers: set[int],
@@ -889,6 +931,8 @@ class GPT(nn.Module):
             raise ValueError(f"resid_mix_mode must be off|scalar|channel, got {resid_mix_mode}")
         if resid_scale_mode not in {"off", "shared_scalar", "channel"}:
             raise ValueError(f"resid_scale_mode must be off|shared_scalar|channel, got {resid_scale_mode}")
+        if attnres_routing_mode not in {"token_softmax", "shared_scalar"}:
+            raise ValueError(f"attnres_routing_mode must be token_softmax|shared_scalar, got {attnres_routing_mode}")
         if local_attn_window < 0:
             raise ValueError(f"local_attn_window must be >= 0, got {local_attn_window}")
         if output_head_mode in {"low_rank", "tied_residual"} and output_head_rank <= 0:
@@ -929,6 +973,9 @@ class GPT(nn.Module):
                     use_mlp_scale,
                     resid_mix_mode,
                     resid_scale_mode,
+                    attnres_layers,
+                    attnres_num_sources,
+                    attnres_routing_mode,
                     latent_kv_layers,
                     latent_kv_dim,
                     local_attn_layers,
@@ -961,29 +1008,50 @@ class GPT(nn.Module):
         x = self.tok_emb(input_ids)
         x = F.rms_norm(x, (x.size(-1),))
         x0 = x
-        skips: list[Tensor] = []
+        encoder_outputs: list[Tensor] = []
+
+        def make_attnres_candidates(current_x: Tensor, matched_skip: Tensor | None) -> list[Tensor]:
+            candidates = [current_x]
+            if matched_skip is not None:
+                candidates.append(matched_skip)
+            if encoder_outputs:
+                candidates.append(encoder_outputs[0])
+            if x0 is not current_x:
+                candidates.append(x0)
+            deduped: list[Tensor] = []
+            seen: set[int] = set()
+            for cand in candidates:
+                ident = id(cand)
+                if ident in seen:
+                    continue
+                seen.add(ident)
+                deduped.append(cand)
+            return deduped
 
         # First half stores skips; second half reuses them in reverse order.
         for i in range(self.num_encoder_layers):
             qd = lora.q_loras[i] if lora else None
             vd = lora.v_loras[i] if lora else None
             x = self.blocks[i](x, x0, qd, vd)
-            skips.append(x)
+            encoder_outputs.append(x)
         for i in range(self.num_decoder_layers):
             bi = self.num_encoder_layers + i
-            if skips:
-                skip = skips.pop()
+            skip = None
+            if i < self.num_skip_weights and encoder_outputs:
+                skip = encoder_outputs[self.num_encoder_layers - 1 - i]
                 if self.skip_link_pattern == "alternate" and i % 2 == 1:
                     skip = None
-                if self.skip_mode == "learned" and skip is not None:
-                    x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skip
-                elif self.skip_mode == "shared_scalar" and skip is not None:
-                    x = x + self.skip_weights[i].to(dtype=x.dtype).reshape(1, 1, 1) * skip
-                elif self.skip_mode == "unit" and skip is not None:
-                    x = x + skip
+                if self.blocks[bi].attnres is None:
+                    if self.skip_mode == "learned" and skip is not None:
+                        x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skip
+                    elif self.skip_mode == "shared_scalar" and skip is not None:
+                        x = x + self.skip_weights[i].to(dtype=x.dtype).reshape(1, 1, 1) * skip
+                    elif self.skip_mode == "unit" and skip is not None:
+                        x = x + skip
             qd = lora.q_loras[bi] if lora else None
             vd = lora.v_loras[bi] if lora else None
-            x = self.blocks[bi](x, x0, qd, vd)
+            attnres_candidates = make_attnres_candidates(x, skip) if self.blocks[bi].attnres is not None else None
+            x = self.blocks[bi](x, x0, qd, vd, attnres_candidates=attnres_candidates)
         x = self.final_norm(x)
         logits = self.output_head(x, self.tok_emb.weight)
         logits = logits + (lora.lm_head_lora(x) if lora else 0)
@@ -1044,7 +1112,7 @@ def build_optimizers(args: Hyperparameters, base_model: GPT) -> tuple[list[torch
         return args.early_layer_lr_scale if layer_idx < num_encoder_layers else args.late_layer_lr_scale
 
     def mech_scale_for(name: str) -> float:
-        if any(token in name for token in ("c_kv_latent", "mixer", "local_window")):
+        if any(token in name for token in ("c_kv_latent", "mixer", "local_window", "attnres")):
             return args.new_mech_lr_scale
         return 1.0
 
@@ -1445,6 +1513,7 @@ def main() -> None:
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
+    attnres_layers = parse_layer_index_set(args.attnres_layers, args.num_layers, "attnres")
     latent_kv_layers = parse_layer_index_set(args.latent_kv_layers, args.num_layers, "latent kv")
     local_attn_layers = parse_layer_index_set(args.local_attn_layers, args.num_layers, "local attention")
     mixer_layers = parse_layer_index_set(args.mixer_layers, args.num_layers, "mixer")
@@ -1490,6 +1559,9 @@ def main() -> None:
         resid_scale_mode=resid_scale_mode,
         skip_mode=args.skip_mode,
         skip_link_pattern=args.skip_link_pattern,
+        attnres_layers=attnres_layers,
+        attnres_num_sources=args.attnres_num_sources,
+        attnres_routing_mode=args.attnres_routing_mode,
         latent_kv_layers=latent_kv_layers,
         latent_kv_dim=args.latent_kv_dim,
         local_attn_layers=local_attn_layers,
@@ -1531,6 +1603,10 @@ def main() -> None:
     log0(
         f"routing_modes:resid_mix_mode={resid_mix_mode} resid_scale_mode={resid_scale_mode} "
         f"skip_link_pattern={args.skip_link_pattern}"
+    )
+    log0(
+        f"attnres:layers={','.join(str(i) for i in sorted(attnres_layers)) if attnres_layers else 'none'} "
+        f"num_sources:{args.attnres_num_sources} routing_mode:{args.attnres_routing_mode}"
     )
     log0(
         f"latent_kv:layers={','.join(str(i) for i in sorted(latent_kv_layers)) if latent_kv_layers else 'none'} "
