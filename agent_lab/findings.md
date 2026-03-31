@@ -343,3 +343,39 @@ Use [`state.md`](./state.md) for the live dashboard, [`ideas.md`](./ideas.md) fo
 - it still did not beat the actual hybrid frontier, so this is a hint rather than a win.
 - Next falsification:
 - if schedule work is resumed later, apply head-focused cooldown on top of the stronger `AL-20260331-004` backbone or after another architecture change.
+
+## F-20260331-028: Late-Layer AttnRes-lite Is The Wrong Routing Shape On This Frontier
+
+- Claim: replacing fixed routing with AttnRes-lite across late layers is strongly misaligned with the current hybrid-mixer frontier.
+- Confidence: high
+- Evidence:
+- [`AL-20260331-007`](./experiments.tsv) and [`AL-20260331-009`](./experiments.tsv) both regressed catastrophically into the `1.50+` band.
+- [`AL-20260331-010`](./experiments.tsv) shows the failure persists even when stacked on top of the cheap-routing package.
+- Counterevidence:
+- the tranche still lacks a clean rerun of `Q1`, so the exact three-source late-layer number is missing.
+- Next falsification:
+- only revisit late-layer depth routing if the mechanism itself is redesigned substantially rather than simply rerun.
+
+## F-20260331-029: If Dynamic Depth Routing Helps At All, It Belongs Only At The Top
+
+- Claim: the only AttnRes-lite placement that looked even remotely viable was restricting the mechanism to the top two layers.
+- Confidence: medium
+- Evidence:
+- [`AL-20260331-008`](./experiments.tsv) at `1.3499` was vastly better than the other completed Q runs and stayed close to the old hybrid anchor.
+- All broader late-layer placements were dramatically worse.
+- Counterevidence:
+- [`AL-20260331-008`](./experiments.tsv) still lost clearly to the current best [`AL-20260331-004`](./experiments.tsv), so this is a faint hint rather than a live frontier result.
+- Next falsification:
+- if AttnRes-lite is revisited, test an even lighter top-of-stack-only version or a more constrained top-layer gate rather than broad late-stack routing.
+
+## F-20260331-030: Cheap Fixed Routing And Dynamic Depth Routing Did Not Stack
+
+- Claim: the best cheap-routing package and the first AttnRes-lite mechanism are not complementary in their current forms.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260331-010`](./experiments.tsv) stayed in the same catastrophic regime as the other broad late-layer AttnRes-lite runs.
+- It did not recover toward the hybrid frontier even though the cheap-routing package was itself a real secondary winner.
+- Counterevidence:
+- this only tests one combo form; a future top-only or much lighter depth-routing design could still interact differently.
+- Next falsification:
+- if routing combo work is revisited, combine cheap routing only with top-of-stack dynamic routing, not the broad late-layer AttnRes-lite design.

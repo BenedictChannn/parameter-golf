@@ -846,7 +846,7 @@ Is the lower-four-mixer winner best because of the general idea, or is there sti
 
 ## T-20260331-Q: AttnRes-lite Dynamic Depth Routing
 
-**Status:** active
+**Status:** completed
 
 **Goal**  
 Test whether fixed residual and skip routing should give way to a small, input-dependent depth-routing module over a few earlier layer states.
@@ -881,11 +881,25 @@ If skip topology matters and routing redesign matters, is the next step to let t
 - if `Q4` stays close, the family may be useful in a cheaper form
 - if only `Q5` wins, dynamic routing likely wants to be part of a package, not a standalone change
 
-**Current status**
+**Results**
 
-- [`AL-20260331-006`](./experiments.tsv) crashed before producing a metric because TorchDynamo rejected a Python `id()` call inside the candidate-routing helper.
-- That compiler issue was fixed, the implementation was simplified, and the tranche was resumed.
-- A clean rerun of `Q1` is still needed because the first attempt did not produce a valid score.
+- [`AL-20260331-006`](./experiments.tsv) (`Q1`, late-layer AttnRes-lite with three sources) crashed before producing a metric because TorchDynamo rejected a Python `id()` call inside the candidate-routing helper.
+- [`AL-20260331-007`](./experiments.tsv) (`Q2`, late-layer AttnRes-lite with four sources) failed badly at `1.5043`.
+- [`AL-20260331-008`](./experiments.tsv) (`Q3`, AttnRes-lite only on the top two layers) was much cleaner at `1.3499`, but still did not beat the frontier.
+- [`AL-20260331-009`](./experiments.tsv) (`Q4`, shared routing) was also catastrophic at `1.5133`.
+- [`AL-20260331-010`](./experiments.tsv) (`Q5`, AttnRes-lite plus cheap-routing package) stayed in the same bad regime at `1.5016`.
+
+**Reading**
+
+- broad late-layer dynamic depth routing is the wrong shape on this frontier
+- the problem is not just routing cost, because the cheaper shared-routing version also failed badly
+- the problem is not solved by combining AttnRes-lite with the best fixed cheap-routing package
+- the only remotely live hint is top-of-stack-only routing, which stayed near the old hybrid anchor but still lost to the current best
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: AttnRes-lite as implemented is mostly falsified on the current frontier, except for a faint top-of-stack-only hint that is not yet strong enough to prioritize over better live families
 
 ## T-20260331-R: Architecture-Specific Schedules
 

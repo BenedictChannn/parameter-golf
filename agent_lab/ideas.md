@@ -285,10 +285,11 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - it directly builds on the routing lessons from tranches `H` and `M`
 - it tests a new principle instead of a local scalar adjustment
 - Related tranche: `T-20260331-Q`
-- Status: active
+- Status: completed
 - Evidence so far:
 - [`AL-20260331-006`](./experiments.tsv) crashed before producing a metric because a TorchDynamo-incompatible Python `id()` call slipped into the first implementation.
-- That implementation bug is now fixed and the tranche is running again, so the family is still scientifically alive.
+- [`AL-20260331-007`](./experiments.tsv), [`AL-20260331-009`](./experiments.tsv), and [`AL-20260331-010`](./experiments.tsv) all failed badly, which means broad late-layer dynamic depth routing is the wrong shape on the current frontier.
+- [`AL-20260331-008`](./experiments.tsv) says top-two-layer routing is the only remotely viable version, but it still did not beat the frontier.
 
 ### Q-20260331-003 - Architecture-Specific Schedules
 
@@ -440,3 +441,15 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - Evidence so far:
 - [`AL-20260331-011`](./experiments.tsv) and [`AL-20260331-012`](./experiments.tsv) show broad warmdown still hurts.
 - [`AL-20260331-014`](./experiments.tsv) says head-focused cooldown is the only schedule hint that stayed near the frontier, but it still did not win.
+
+### I-20260331-008 - Top-Only Dynamic Depth Routing
+
+- Category: architecture
+- Hypothesis: if dynamic depth routing is useful at all on this backbone, it belongs only in the topmost layers where representations are being selected for output.
+- Why it might work:
+- broad late-layer AttnRes-lite was clearly too disruptive
+- top-two-layer routing was vastly cleaner than any broader placement
+- Status: parked
+- Evidence so far:
+- [`AL-20260331-008`](./experiments.tsv) was the only AttnRes-lite run that stayed near the older hybrid anchor.
+- [`AL-20260331-007`](./experiments.tsv), [`AL-20260331-009`](./experiments.tsv), and [`AL-20260331-010`](./experiments.tsv) suggest the main danger is applying dynamic depth routing too broadly.

@@ -29,15 +29,17 @@ This is the first-read dashboard for the current research state. Use this for th
 
 ## Active Tranche
 
-- Tranche: [`T-20260331-Q`](./tranches.md#t-20260331-q-attnres-lite-dynamic-depth-routing)
-- Goal: test whether dynamic depth routing over a few earlier layer states beats fixed skip-style routing on the hybrid-mixer frontier
-- Status: running after the initial `Q1` compiler bug was fixed; `Q1` needs a clean rerun because the first attempt crashed before producing a metric
+- Tranche: none
+- Goal: tranche `Q` is closed; choose the next architecture branch from a cleaner post-`PQR` state
+- Status: ready to pivot
 
 ## Working Beliefs
 
 - The hybrid mixer family still has headroom. Tranche `P` improved the frontier twice more, which means the original `AL-20260330-104` win was real but not locally exhausted.
 - Lower-stack replacement is robust rather than brittle. Lower three mixers, a wider mixer, and a wider mixer kernel all beat the old best; lower five mixers did not.
 - The best result so far is a stronger lower-four mixer, not a more aggressive lower-five placement. This suggests the frontier still wants some lower-stack attention, but the mixer mechanism itself was underpowered.
+- Dynamic depth routing was mostly the wrong fit in this first form. Late-layer AttnRes-lite failed badly, whether it used richer token-wise routing, cheaper shared routing, or the cheap-routing package underneath.
+- The only AttnRes-lite variant that stayed remotely alive was top-two-layer routing. That suggests dynamic depth selection, if useful at all, belongs only at the very top of the stack.
 - Output-head architecture was mostly a dead end. The existing dense untied head stayed clearly better than low-rank, bottleneck, and two-stage alternatives.
 - The output win from tranche F was about the dense untied head itself, not an obviously more parameter-efficient head architecture.
 - Skip/residual redesign is a live secondary family. Shared scalar skip gates helped, and the full cheap-routing package became the second-best new frontier.
@@ -49,15 +51,15 @@ This is the first-read dashboard for the current research state. Use this for th
 ## Open Questions
 
 - Can the cheap-routing package stack with the new stronger hybrid winner, or are they redundant?
-- Would AttnRes-lite dynamic depth routing beat fixed skip routing if we let later layers choose among a few earlier states?
+- Is top-of-stack-only dynamic depth routing worth a much lighter second-generation revisit, or is the AttnRes family mostly closed already?
 - What exactly is crashing in the local-attention path, and is that family still worth finishing once debugged?
 - Is there any architecture-specific schedule win left beyond output-path-sensitive cooldown, or is this family mostly closed?
 
 ## Next Planned Runs
 
-- active tranche: `T-20260331-Q` AttnRes-lite dynamic depth routing
 - next tranche candidate: hybrid-mixer plus cheap-routing combo around [`AL-20260331-004`](./experiments.tsv)
 - next tranche candidate: local-global attention debug and completion
+- next tranche candidate: only if justified later, a much lighter top-of-stack AttnRes follow-up
 - later backlog: two dedicated MLP exploration tranches, broad-family first and polynomial second
 
 ## Go Deeper
