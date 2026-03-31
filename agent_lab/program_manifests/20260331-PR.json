@@ -1,0 +1,9 @@
+{
+  "program_id": "P-20260331-PR",
+  "title": "Hybrid Mixer Refinement Then Architecture-Specific Schedules",
+  "description": "Run the two currently runnable next-step tranches sequentially: first refine the hybrid-mixer frontier, then test schedule variants on the winning hybrid backbone.",
+  "tranches": [
+    "agent_lab/tranche_manifests/20260331-P-hybrid-mixer-refinement.json",
+    "agent_lab/tranche_manifests/20260331-R-architecture-specific-schedules.json"
+  ]
+}
