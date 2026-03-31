@@ -216,3 +216,79 @@ Use [`state.md`](./state.md) for the live dashboard, [`ideas.md`](./ideas.md) fo
 - this only tests one reinvestment style: another full-attention layer on top of the same all-layer compression recipe.
 - Next falsification:
 - if reinvestment is revisited, try spending the savings on a different form of capacity rather than plain extra depth.
+
+## F-20260331-018: Lower-Stack Hybrid Mixers Are a Real Frontier Move
+
+- Claim: the strongest architectural win in the overnight program was replacing the lower four attention layers with sequence mixers.
+- Confidence: high
+- Evidence:
+- [`AL-20260330-104`](./experiments.tsv) improved the frontier from `1.3564` to `1.3488` while staying valid and smaller than the old best line.
+- [`AL-20260330-103`](./experiments.tsv) also stayed ahead of the old frontier, so the hybrid family is not a one-off lucky placement.
+- [`AL-20260330-101`](./experiments.tsv), [`AL-20260330-102`](./experiments.tsv), and [`AL-20260330-105`](./experiments.tsv) map the failure modes and show the lower stack is the cleanest place to swap attention out.
+- Counterevidence:
+- none strong inside tranche J; the main open question is how much more headroom the winning placement still has.
+- Next falsification:
+- vary mixer width, kernel, or exact lower-stack placement around [`AL-20260330-104`](./experiments.tsv). If those all flatten or regress, the family is real but already locally mapped.
+
+## F-20260331-019: Output-Head Architecture Was Not the Bottleneck
+
+- Claim: after tranche F, the dense untied output head remained the right output-head architecture; the next win did not come from low-rank or richer nonlinear heads.
+- Confidence: high
+- Evidence:
+- [`AL-20260330-106`](./experiments.tsv) and [`AL-20260330-107`](./experiments.tsv) show low-rank heads regressed badly.
+- [`AL-20260330-108`](./experiments.tsv) and [`AL-20260330-110`](./experiments.tsv) show richer nonlinear heads also failed badly.
+- [`AL-20260330-109`](./experiments.tsv) was the best K-family variant, but still clearly worse than the dense untied frontier.
+- Counterevidence:
+- [`AL-20260330-109`](./experiments.tsv) suggests the untied win may be partly about a corrective residual head, so the family is not conceptually dead forever.
+- Next falsification:
+- only revisit output-head architecture if a later backbone change creates a different representation regime; do not spend another blind tranche here on the current line.
+
+## F-20260331-020: Local-Global Attention Is Still Untested, Not Falsified
+
+- Claim: the local-global attention family is currently unresolved rather than disproven.
+- Confidence: high
+- Evidence:
+- [`AL-20260330-111`](./experiments.tsv) crashed before producing a metric, so tranche L never became a fair comparison against the frontier.
+- The family therefore has zero trustworthy score evidence so far.
+- Counterevidence:
+- none yet; the family has not actually been tested.
+- Next falsification:
+- debug the lower-stack local-window crash first, then rerun the planned L tranche before making any scientific claim about local-global attention.
+
+## F-20260331-021: Routing Redesign Can Stack Into a Useful Secondary Frontier
+
+- Claim: skip/residual redesign was worth the compute, and the best version is a coherent cheap-routing package rather than a single isolated simplification.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260330-116`](./experiments.tsv) shared scalar skip gates already beat the old pre-program frontier.
+- [`AL-20260330-120`](./experiments.tsv) improved further to `1.3534`, making it the second-best overnight result after the hybrid mixer win.
+- [`AL-20260330-117`](./experiments.tsv), [`AL-20260330-118`](./experiments.tsv), and [`AL-20260330-119`](./experiments.tsv) stayed close but weaker, which supports the idea that the routing components interact.
+- Counterevidence:
+- the routing package still lost to the hybrid-mixer winner by a clear margin.
+- Next falsification:
+- test whether the cheap-routing package stacks with the hybrid-mixer frontier or whether both are buying the same underlying effect.
+
+## F-20260331-022: Mechanism-Specific Learning Rates Are Supportive, Not Transformative
+
+- Claim: more structured learning-rate splits can keep up with the old frontier, but they did not create a new breakthrough on their own.
+- Confidence: medium
+- Evidence:
+- [`AL-20260330-121`](./experiments.tsv), [`AL-20260330-124`](./experiments.tsv), and [`AL-20260330-125`](./experiments.tsv) all landed in the old-best band around `1.3561` to `1.3562`.
+- [`AL-20260330-122`](./experiments.tsv) and [`AL-20260330-123`](./experiments.tsv) show the wrong directional splits regress.
+- Counterevidence:
+- the positive N-family results are so small that they may mostly be support tools for future architectures rather than useful standalone tranches.
+- Next falsification:
+- apply the best N-family LR splits to the hybrid-mixer or cheap-routing winners and see whether they unlock extra headroom there.
+
+## F-20260331-023: Naive Quantization-Aware Warmdown Mostly Hurts
+
+- Claim: the first pass at quantization-aware warmdown did not help the submitted compressed model, even though some variants reduced artifact size sharply.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260330-126`](./experiments.tsv) and [`AL-20260330-127`](./experiments.tsv) both regressed badly despite much smaller artifacts.
+- [`AL-20260330-130`](./experiments.tsv) shows the combined tail also failed badly.
+- [`AL-20260330-128`](./experiments.tsv) and [`AL-20260330-129`](./experiments.tsv) stayed close, but still did not beat the old frontier.
+- Counterevidence:
+- [`AL-20260330-129`](./experiments.tsv) was close enough that output-path-specific cooldown might still matter in a different architecture regime.
+- Next falsification:
+- if quantization-aware scheduling is revisited, focus on output-path-sensitive finishing or architecture-specific tails rather than broad colder schedules.

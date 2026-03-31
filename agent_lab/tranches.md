@@ -731,6 +731,8 @@ These are the next six tranche manifests prepared for the lab. All six are now r
 ### T-20260330-J - Hybrid Sequence Mixer Audit
 
 - Manifest: [`20260330-J-hybrid-sequence-mixer.json`](./tranche_manifests/20260330-J-hybrid-sequence-mixer.json)
+- Status: completed
+- Outcome: clear win; [`AL-20260330-104`](./experiments.tsv) is the new best valid frontier at `1.3488`, and [`AL-20260330-103`](./experiments.tsv) also kept the family alive
 - Why it is worthy:
 - it tests whether some layers can stop using full attention entirely
 - it is the cleanest bold replacement family already supported by the repo
@@ -738,6 +740,8 @@ These are the next six tranche manifests prepared for the lab. All six are now r
 ### T-20260330-K - Output Head Architecture Audit
 
 - Manifest: [`20260330-K-output-head-architecture.json`](./tranche_manifests/20260330-K-output-head-architecture.json)
+- Status: completed
+- Outcome: failed as a frontier family on the current backbone; the dense untied head still wins clearly
 - Why it is worthy:
 - output path has already produced some of the largest gains in the project
 - the next good question is output-head architecture, not more scalar tuning
@@ -745,6 +749,8 @@ These are the next six tranche manifests prepared for the lab. All six are now r
 ### T-20260330-L - Local-Global Attention Split
 
 - Manifest: [`20260330-L-local-global-attention.json`](./tranche_manifests/20260330-L-local-global-attention.json)
+- Status: blocked
+- Outcome: [`AL-20260330-111`](./experiments.tsv) crashed before the first metric, so the family is unresolved and needs a debug tranche
 - Why it is worthy:
 - attention geometry already mattered a lot
 - the next structural question is whether global attention is needed in every layer
@@ -752,6 +758,8 @@ These are the next six tranche manifests prepared for the lab. All six are now r
 ### T-20260330-M - Skip and Residual Redesign
 
 - Manifest: [`20260330-M-skip-residual-redesign.json`](./tranche_manifests/20260330-M-skip-residual-redesign.json)
+- Status: completed
+- Outcome: clear secondary win; [`AL-20260330-120`](./experiments.tsv) reached `1.3534` and shared scalar skip gates were also independently useful
 - Why it is worthy:
 - tranche H showed deletion is mostly the wrong question
 - the live path is redesigning routing, not removing it
@@ -759,6 +767,8 @@ These are the next six tranche manifests prepared for the lab. All six are now r
 ### T-20260330-N - Mechanism-Specific Learning Rates
 
 - Manifest: [`20260330-N-mechanism-specific-lrs.json`](./tranche_manifests/20260330-N-mechanism-specific-lrs.json)
+- Status: completed
+- Outcome: supportive but not transformative; several splits nearly tied the old frontier, but none challenged the new hybrid-mixer best
 - Why it is worthy:
 - some architecture failures may actually be optimization failures
 - this gives future bold mechanisms a fairer training regime
@@ -766,6 +776,8 @@ These are the next six tranche manifests prepared for the lab. All six are now r
 ### T-20260330-O - Quantization-Aware Warmdown
 
 - Manifest: [`20260330-O-quantization-aware-warmdown.json`](./tranche_manifests/20260330-O-quantization-aware-warmdown.json)
+- Status: completed
+- Outcome: mostly wrong; broader warmdown and stabilization variants hurt, while head-only cooldown only managed a near-tie to the old pre-program best
 - Why it is worthy:
 - the submitted model is compressed, not the raw fp model
 - challenge-specific end-of-training behavior may matter more than generic schedule quality
