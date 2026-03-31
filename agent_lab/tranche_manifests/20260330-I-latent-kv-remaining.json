@@ -1,0 +1,62 @@
+{
+  "tranche_id": "T-20260330-I-remaining",
+  "title": "Latent-KV Attention Audit Remaining Queue",
+  "research_question": "If all-layer latent-KV loses, is the real issue full-stack placement rather than the latent-KV mechanism itself?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260329-030",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "i3-upper-latent64",
+      "exp_id": "AL-20260330-013",
+      "anchor_exp_id": "AL-20260330-012",
+      "hypothesis": "Upper layers may tolerate K/V compression better than earlier layers, so localizing the latent bottleneck to the top of the stack could recover much of the all-layer quality loss.",
+      "description": "upper-layer latent-KV placement test against the all-layer latent64 baseline",
+      "env": {
+        "LATENT_KV_LAYERS": "5,6,7,8",
+        "LATENT_KV_DIM": "64"
+      }
+    },
+    {
+      "name": "i4-lower-latent64",
+      "exp_id": "AL-20260330-014",
+      "anchor_exp_id": "AL-20260330-012",
+      "hypothesis": "Early layers may be the cleaner place to compress K/V while preserving later full-fidelity attention, so lower-only latent-KV could beat all-layer compression.",
+      "description": "lower-layer latent-KV placement test against the all-layer latent64 baseline",
+      "env": {
+        "LATENT_KV_LAYERS": "0,1,2,3",
+        "LATENT_KV_DIM": "64"
+      }
+    },
+    {
+      "name": "i5-10l-all-latent64",
+      "exp_id": "AL-20260330-015",
+      "anchor_exp_id": "AL-20260330-012",
+      "hypothesis": "The stronger latent-KV line may only make sense if its saved memory is reinvested into one more layer, so 10L plus all-layer latent64 could outperform the no-reinvestment version.",
+      "description": "reinvest all-layer latent64 savings into a tenth layer",
+      "env": {
+        "NUM_LAYERS": "10",
+        "LATENT_KV_LAYERS": "0,1,2,3,4,5,6,7,8,9",
+        "LATENT_KV_DIM": "64"
+      }
+    }
+  ]
+}

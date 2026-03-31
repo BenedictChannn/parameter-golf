@@ -35,6 +35,8 @@ Run the work in tranches.
 
 Every tranche should teach something. A run that does not improve `val_bpb` can still be successful if it eliminates a bad path, exposes an interaction, or suggests a better next branch.
 
+Chat-led scientific judgment is the default. Local scripts may help execute, summarize, or visualize experiments, but tranche-to-tranche reasoning should stay in the active research loop rather than being delegated blindly to an executor.
+
 ## Default Working Surface
 
 For autonomous agent-lab work:

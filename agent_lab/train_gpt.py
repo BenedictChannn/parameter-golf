@@ -69,6 +69,23 @@ class Hyperparameters:
     tie_embeddings = bool(int(os.environ.get("TIE_EMBEDDINGS", "1")))
     rope_base = float(os.environ.get("ROPE_BASE", 10000.0))
     logit_softcap = float(os.environ.get("LOGIT_SOFTCAP", 30.0))
+    use_resid_mix = bool(int(os.environ.get("USE_RESID_MIX", "1")))
+    use_attn_scale = bool(int(os.environ.get("USE_ATTN_SCALE", "1")))
+    use_mlp_scale = bool(int(os.environ.get("USE_MLP_SCALE", "1")))
+    skip_mode = os.environ.get("SKIP_MODE", "learned")
+    skip_link_pattern = os.environ.get("SKIP_LINK_PATTERN", "all")
+    resid_mix_mode = os.environ.get("RESID_MIX_MODE", "channel")
+    resid_scale_mode = os.environ.get("RESID_SCALE_MODE", "channel")
+    latent_kv_layers = os.environ.get("LATENT_KV_LAYERS", "")
+    latent_kv_dim = int(os.environ.get("LATENT_KV_DIM", 0))
+    local_attn_layers = os.environ.get("LOCAL_ATTN_LAYERS", "")
+    local_attn_window = int(os.environ.get("LOCAL_ATTN_WINDOW", 0))
+    mixer_layers = os.environ.get("MIXER_LAYERS", "")
+    mixer_dim = int(os.environ.get("MIXER_DIM", 256))
+    mixer_kernel = int(os.environ.get("MIXER_KERNEL", 4))
+    output_head_mode = os.environ.get("OUTPUT_HEAD_MODE", "auto")
+    output_head_rank = int(os.environ.get("OUTPUT_HEAD_RANK", 64))
+    output_head_bottleneck = int(os.environ.get("OUTPUT_HEAD_BOTTLENECK", 256))
 
     # Optimizer hyperparameters.
     embed_lr = float(os.environ.get("EMBED_LR", 0.6))
@@ -76,7 +93,12 @@ class Hyperparameters:
     tied_embed_lr = float(os.environ.get("TIED_EMBED_LR", 0.05))
     tied_embed_init_std = float(os.environ.get("TIED_EMBED_INIT_STD", 0.005))
     matrix_lr = float(os.environ.get("MATRIX_LR", 0.06))
+    attn_matrix_lr = float(os.environ.get("ATTN_MATRIX_LR", 0.0))
+    mlp_matrix_lr = float(os.environ.get("MLP_MATRIX_LR", 0.0))
     scalar_lr = float(os.environ.get("SCALAR_LR", 0.04))
+    early_layer_lr_scale = float(os.environ.get("EARLY_LAYER_LR_SCALE", 1.0))
+    late_layer_lr_scale = float(os.environ.get("LATE_LAYER_LR_SCALE", 1.0))
+    new_mech_lr_scale = float(os.environ.get("NEW_MECH_LR_SCALE", 1.0))
     muon_momentum = float(os.environ.get("MUON_MOMENTUM", 0.95))
     muon_backend_steps = int(os.environ.get("MUON_BACKEND_STEPS", 5))
     muon_momentum_warmup_start = float(os.environ.get("MUON_MOMENTUM_WARMUP_START", 0.85))
@@ -92,6 +114,12 @@ class Hyperparameters:
     ttt_chunk_size = int(os.environ.get("TTT_CHUNK_SIZE", 256))
     ttt_eval_seq_len = int(os.environ.get("TTT_EVAL_SEQ_LEN", 1024))
     ttt_batch_size = int(os.environ.get("TTT_BATCH_SIZE", 64))
+    warmdown_fraction = float(os.environ.get("WARMDOWN_FRACTION", 0.0))
+    final_lr_scale = float(os.environ.get("FINAL_LR_SCALE", 0.0))
+    final_stabilize_steps = int(os.environ.get("FINAL_STABILIZE_STEPS", 0))
+    final_stabilize_lr_scale = float(os.environ.get("FINAL_STABILIZE_LR_SCALE", 0.1))
+    final_head_lr_scale = float(os.environ.get("FINAL_HEAD_LR_SCALE", 1.0))
+    final_backbone_lr_scale = float(os.environ.get("FINAL_BACKBONE_LR_SCALE", 1.0))
 
 # -----------------------------
 # MUON OPTIMIZER 
@@ -520,6 +548,21 @@ class CastedLinear(nn.Linear):
         return F.linear(x, self.weight.to(x.dtype), bias)
 
 
+def _broadcast_param_scale(scale: Tensor, ref: Tensor) -> Tensor:
+    if scale.ndim == 0 or scale.numel() == 1:
+        return scale.to(dtype=ref.dtype).reshape(1, 1, 1)
+    return scale.to(dtype=ref.dtype)[None, None, :]
+
+
+def build_local_causal_mask(seqlen: int, window: int, device: torch.device, dtype: torch.dtype) -> Tensor:
+    idx = torch.arange(seqlen, device=device)
+    delta = idx[:, None] - idx[None, :]
+    allowed = (delta >= 0) & (delta < window)
+    mask = torch.full((seqlen, seqlen), float("-inf"), device=device, dtype=torch.float32)
+    mask.masked_fill_(allowed, 0.0)
+    return mask[None, None, :, :].to(dtype=dtype)
+
+
 def restore_low_dim_params_to_fp32(module: nn.Module) -> None:
     # Keep small/control parameters in fp32 even when the model body runs in bf16.
     with torch.no_grad():
@@ -567,6 +610,8 @@ class CausalSelfAttention(nn.Module):
         num_kv_heads: int,
         rope_base: float,
         qk_gain_init: float,
+        latent_kv_dim: int = 0,
+        local_window: int = 0,
     ):
         super().__init__()
         if dim % num_heads != 0:
@@ -579,9 +624,17 @@ class CausalSelfAttention(nn.Module):
         if self.head_dim % 2 != 0:
             raise ValueError("head_dim must be even for RoPE")
         kv_dim = self.num_kv_heads * self.head_dim
+        self.use_latent_kv = latent_kv_dim > 0
+        self.local_window = local_window
         self.c_q = CastedLinear(dim, dim, bias=False)
-        self.c_k = CastedLinear(dim, kv_dim, bias=False)
-        self.c_v = CastedLinear(dim, kv_dim, bias=False)
+        if self.use_latent_kv:
+            self.c_kv_latent = CastedLinear(dim, latent_kv_dim, bias=False)
+            self.c_k = CastedLinear(latent_kv_dim, kv_dim, bias=False)
+            self.c_v = CastedLinear(latent_kv_dim, kv_dim, bias=False)
+        else:
+            self.c_kv_latent = None
+            self.c_k = CastedLinear(dim, kv_dim, bias=False)
+            self.c_v = CastedLinear(dim, kv_dim, bias=False)
         self.proj = CastedLinear(dim, dim, bias=False)
         self.proj._zero_init = True
         self.q_gain = nn.Parameter(torch.full((num_heads,), qk_gain_init, dtype=torch.float32))
@@ -590,8 +643,12 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x: Tensor, q_delta=None, v_delta=None) -> Tensor:
         bsz, seqlen, dim = x.shape
         q = self.c_q(x) + (q_delta if q_delta is not None else 0)
-        k = self.c_k(x)
-        v = self.c_v(x) + (v_delta if v_delta is not None else 0)
+        kv_in = x
+        if self.c_kv_latent is not None:
+            kv_in = self.c_kv_latent(x)
+            kv_in = F.rms_norm(kv_in, (kv_in.size(-1),))
+        k = self.c_k(kv_in)
+        v = self.c_v(kv_in) + (v_delta if v_delta is not None else 0)
         q = q.reshape(bsz, seqlen, self.num_heads, self.head_dim).transpose(1, 2)
         k = k.reshape(bsz, seqlen, self.num_kv_heads, self.head_dim).transpose(1, 2)
         v = v.reshape(bsz, seqlen, self.num_kv_heads, self.head_dim).transpose(1, 2)
@@ -601,16 +658,48 @@ class CausalSelfAttention(nn.Module):
         q = apply_rotary_emb(q, cos, sin)
         k = apply_rotary_emb(k, cos, sin)
         q = q * self.q_gain.to(dtype=q.dtype)[None, :, None, None]
+        attn_mask = None
+        is_causal = True
+        if self.local_window > 0:
+            attn_mask = build_local_causal_mask(seqlen, self.local_window, x.device, q.dtype)
+            is_causal = False
         y = F.scaled_dot_product_attention(
             q,
             k,
             v,
-            attn_mask=None,
-            is_causal=True,
+            attn_mask=attn_mask,
+            is_causal=is_causal,
             enable_gqa=(self.num_kv_heads != self.num_heads),
         )
         y = y.transpose(1, 2).contiguous().reshape(bsz, seqlen, dim)
         return self.proj(y)
+
+
+class CausalSequenceMixer(nn.Module):
+    def __init__(self, dim: int, mixer_dim: int, kernel_size: int):
+        super().__init__()
+        if mixer_dim <= 0 or mixer_dim > dim:
+            raise ValueError(f"mixer_dim must be in [1, {dim}], got {mixer_dim}")
+        if kernel_size < 2:
+            raise ValueError(f"mixer_kernel must be >= 2, got {kernel_size}")
+        self.mixer_dim = mixer_dim
+        self.kernel_size = kernel_size
+        self.in_proj = CastedLinear(dim, 2 * mixer_dim, bias=False)
+        self.dw_kernel = nn.Parameter(torch.empty(mixer_dim, kernel_size))
+        self.out_proj = CastedLinear(mixer_dim, dim, bias=False)
+        self.out_proj._zero_init = True
+        nn.init.normal_(self.dw_kernel, mean=0.0, std=0.02)
+
+    def forward(self, x: Tensor) -> Tensor:
+        u, gate = self.in_proj(x).chunk(2, dim=-1)
+        u = F.rms_norm(u, (u.size(-1),))
+        u = u.transpose(1, 2)
+        kernel = self.dw_kernel[:, None, :].to(dtype=u.dtype)
+        u = F.pad(u, (self.kernel_size - 1, 0))
+        u = F.conv1d(u, kernel, bias=None, groups=self.mixer_dim)
+        u = u.transpose(1, 2)
+        y = F.silu(gate) * u
+        return self.out_proj(y)
 
 
 class MLP(nn.Module):
@@ -627,34 +716,133 @@ class MLP(nn.Module):
         return self.proj(x.square())
 
 
+class OutputHead(nn.Module):
+    def __init__(self, mode: str, dim: int, vocab_size: int, rank: int, bottleneck: int):
+        super().__init__()
+        if mode not in {"tied", "dense", "low_rank", "bottleneck", "two_stage", "tied_residual"}:
+            raise ValueError(f"unsupported output_head_mode: {mode}")
+        self.mode = mode
+        self.proj = None
+        self.down = None
+        self.up = None
+        self.mid = None
+        self.residual_down = None
+        self.residual_up = None
+        if mode == "dense":
+            self.proj = CastedLinear(dim, vocab_size, bias=False)
+            self.proj._zero_init = True
+        elif mode == "low_rank":
+            self.down = CastedLinear(dim, rank, bias=False)
+            self.up = CastedLinear(rank, vocab_size, bias=False)
+            self.up._zero_init = True
+        elif mode == "bottleneck":
+            self.down = CastedLinear(dim, bottleneck, bias=False)
+            self.up = CastedLinear(bottleneck, vocab_size, bias=False)
+            self.up._zero_init = True
+        elif mode == "two_stage":
+            self.down = CastedLinear(dim, bottleneck, bias=False)
+            self.mid = CastedLinear(bottleneck, dim, bias=False)
+            self.proj = CastedLinear(dim, vocab_size, bias=False)
+            self.proj._zero_init = True
+        elif mode == "tied_residual":
+            self.residual_down = CastedLinear(dim, rank, bias=False)
+            self.residual_up = CastedLinear(rank, vocab_size, bias=False)
+            self.residual_up._zero_init = True
+
+    def forward(self, x: Tensor, tied_weight: Tensor) -> Tensor:
+        if self.mode == "tied":
+            return F.linear(x, tied_weight)
+        if self.mode == "dense":
+            return self.proj(x)
+        if self.mode == "low_rank":
+            return self.up(F.silu(self.down(x)))
+        if self.mode == "bottleneck":
+            h = F.rms_norm(self.down(x), (self.down.out_features,))
+            return self.up(F.silu(h))
+        if self.mode == "two_stage":
+            h = F.silu(self.down(x))
+            h = self.mid(h)
+            return self.proj(F.silu(h))
+        base = F.linear(x, tied_weight)
+        resid = self.residual_up(F.silu(self.residual_down(x)))
+        return base + resid
+
+
 class Block(nn.Module):
     def __init__(
         self,
+        layer_idx: int,
         dim: int,
         num_heads: int,
         num_kv_heads: int,
         mlp_mult: int,
         rope_base: float,
         qk_gain_init: float,
+        use_resid_mix: bool,
+        use_attn_scale: bool,
+        use_mlp_scale: bool,
+        resid_mix_mode: str,
+        resid_scale_mode: str,
+        latent_kv_layers: set[int],
+        latent_kv_dim: int,
+        local_attn_layers: set[int],
+        local_attn_window: int,
+        mixer_layers: set[int],
+        mixer_dim: int,
+        mixer_kernel: int,
     ):
         super().__init__()
         self.attn_norm = RMSNorm()
         self.mlp_norm = RMSNorm()
-        self.attn = CausalSelfAttention(dim, num_heads, num_kv_heads, rope_base, qk_gain_init)
+        self.use_mixer = layer_idx in mixer_layers
+        attn_latent_kv_dim = latent_kv_dim if layer_idx in latent_kv_layers and not self.use_mixer else 0
+        attn_local_window = local_attn_window if layer_idx in local_attn_layers and not self.use_mixer else 0
+        self.attn = None if self.use_mixer else CausalSelfAttention(
+            dim, num_heads, num_kv_heads, rope_base, qk_gain_init, attn_latent_kv_dim, attn_local_window
+        )
+        self.mixer = CausalSequenceMixer(dim, mixer_dim, mixer_kernel) if self.use_mixer else None
         self.mlp = MLP(dim, mlp_mult)
-        self.attn_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32))
-        self.mlp_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32))
-        self.resid_mix = nn.Parameter(torch.stack((torch.ones(dim), torch.zeros(dim))).float())
+        if use_attn_scale:
+            attn_scale_shape = dim if resid_scale_mode == "channel" else 1
+            self.attn_scale = nn.Parameter(torch.ones(attn_scale_shape, dtype=torch.float32))
+        else:
+            self.attn_scale = None
+        if use_mlp_scale:
+            mlp_scale_shape = dim if resid_scale_mode == "channel" else 1
+            self.mlp_scale = nn.Parameter(torch.ones(mlp_scale_shape, dtype=torch.float32))
+        else:
+            self.mlp_scale = None
+        if use_resid_mix:
+            if resid_mix_mode == "channel":
+                self.resid_mix = nn.Parameter(torch.stack((torch.ones(dim), torch.zeros(dim))).float())
+            else:
+                self.resid_mix = nn.Parameter(torch.tensor([1.0, 0.0], dtype=torch.float32))
+        else:
+            self.resid_mix = None
 
     def forward(self, x: Tensor, x0: Tensor, q_delta_fn=None, v_delta_fn=None) -> Tensor:
-        mix = self.resid_mix.to(dtype=x.dtype)
-        x = mix[0][None, None, :] * x + mix[1][None, None, :] * x0
+        if self.resid_mix is not None:
+            mix = self.resid_mix.to(dtype=x.dtype)
+            if mix.ndim == 1:
+                x = mix[0] * x + mix[1] * x0
+            else:
+                x = mix[0][None, None, :] * x + mix[1][None, None, :] * x0
         n = self.attn_norm(x)
-        qd = q_delta_fn(n) if q_delta_fn is not None else None
-        vd = v_delta_fn(n) if v_delta_fn is not None else None
-        attn_out = self.attn(n, qd, vd)
-        x = x + self.attn_scale.to(dtype=x.dtype)[None, None, :] * attn_out
-        x = x + self.mlp_scale.to(dtype=x.dtype)[None, None, :] * self.mlp(self.mlp_norm(x))
+        if self.use_mixer:
+            attn_out = self.mixer(n)
+        else:
+            qd = q_delta_fn(n) if q_delta_fn is not None else None
+            vd = v_delta_fn(n) if v_delta_fn is not None else None
+            attn_out = self.attn(n, qd, vd)
+        if self.attn_scale is None:
+            x = x + attn_out
+        else:
+            x = x + _broadcast_param_scale(self.attn_scale, x) * attn_out
+        mlp_out = self.mlp(self.mlp_norm(x))
+        if self.mlp_scale is None:
+            x = x + mlp_out
+        else:
+            x = x + _broadcast_param_scale(self.mlp_scale, x) * mlp_out
         return x
 
 
@@ -672,35 +860,94 @@ class GPT(nn.Module):
         logit_softcap: float,
         rope_base: float,
         qk_gain_init: float,
+        use_resid_mix: bool,
+        use_attn_scale: bool,
+        use_mlp_scale: bool,
+        resid_mix_mode: str,
+        resid_scale_mode: str,
+        skip_mode: str,
+        skip_link_pattern: str,
+        latent_kv_layers: set[int],
+        latent_kv_dim: int,
+        local_attn_layers: set[int],
+        local_attn_window: int,
+        mixer_layers: set[int],
+        mixer_dim: int,
+        mixer_kernel: int,
+        output_head_mode: str,
+        output_head_rank: int,
+        output_head_bottleneck: int,
     ):
         super().__init__()
         if logit_softcap <= 0.0:
             raise ValueError(f"logit_softcap must be positive, got {logit_softcap}")
+        if skip_mode not in {"learned", "unit", "off", "shared_scalar"}:
+            raise ValueError(f"skip_mode must be one of learned|unit|off|shared_scalar, got {skip_mode}")
+        if skip_link_pattern not in {"all", "alternate"}:
+            raise ValueError(f"skip_link_pattern must be all|alternate, got {skip_link_pattern}")
+        if resid_mix_mode not in {"off", "scalar", "channel"}:
+            raise ValueError(f"resid_mix_mode must be off|scalar|channel, got {resid_mix_mode}")
+        if resid_scale_mode not in {"off", "shared_scalar", "channel"}:
+            raise ValueError(f"resid_scale_mode must be off|shared_scalar|channel, got {resid_scale_mode}")
+        if local_attn_window < 0:
+            raise ValueError(f"local_attn_window must be >= 0, got {local_attn_window}")
+        if output_head_mode in {"low_rank", "tied_residual"} and output_head_rank <= 0:
+            raise ValueError(f"output_head_rank must be positive for mode {output_head_mode}, got {output_head_rank}")
+        if output_head_mode in {"bottleneck", "two_stage"} and output_head_bottleneck <= 0:
+            raise ValueError(
+                f"output_head_bottleneck must be positive for mode {output_head_mode}, got {output_head_bottleneck}"
+            )
         self.tie_embeddings = tie_embeddings
         self.tied_embed_init_std = tied_embed_init_std
         self.logit_softcap = logit_softcap
+        self.skip_mode = skip_mode
+        self.skip_link_pattern = skip_link_pattern
+        self.output_head_mode = output_head_mode if output_head_mode != "auto" else ("tied" if tie_embeddings else "dense")
         self.tok_emb = nn.Embedding(vocab_size, model_dim)
         self.num_encoder_layers = num_layers // 2
         self.num_decoder_layers = num_layers - self.num_encoder_layers
         self.num_skip_weights = min(self.num_encoder_layers, self.num_decoder_layers)
-        self.skip_weights = nn.Parameter(torch.ones(self.num_skip_weights, model_dim, dtype=torch.float32))
+        self.skip_weights = (
+            nn.Parameter(torch.ones(self.num_skip_weights, model_dim, dtype=torch.float32))
+            if self.skip_mode == "learned"
+            else nn.Parameter(torch.ones(self.num_skip_weights, 1, dtype=torch.float32))
+            if self.skip_mode == "shared_scalar"
+            else None
+        )
         self.blocks = nn.ModuleList(
             [
                 Block(
+                    i,
                     model_dim,
                     num_heads,
                     num_kv_heads,
                     mlp_mult,
                     rope_base,
                     qk_gain_init,
+                    use_resid_mix,
+                    use_attn_scale,
+                    use_mlp_scale,
+                    resid_mix_mode,
+                    resid_scale_mode,
+                    latent_kv_layers,
+                    latent_kv_dim,
+                    local_attn_layers,
+                    local_attn_window,
+                    mixer_layers,
+                    mixer_dim,
+                    mixer_kernel,
                 )
                 for i in range(num_layers)
             ]
         )
         self.final_norm = RMSNorm()
-        self.lm_head = None if tie_embeddings else CastedLinear(model_dim, vocab_size, bias=False)
-        if self.lm_head is not None:
-            self.lm_head._zero_init = True
+        self.output_head = OutputHead(
+            self.output_head_mode,
+            model_dim,
+            vocab_size,
+            output_head_rank,
+            output_head_bottleneck,
+        )
         self._init_weights()
 
     def _init_weights(self) -> None:
@@ -725,15 +972,20 @@ class GPT(nn.Module):
         for i in range(self.num_decoder_layers):
             bi = self.num_encoder_layers + i
             if skips:
-                x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skips.pop()
+                skip = skips.pop()
+                if self.skip_link_pattern == "alternate" and i % 2 == 1:
+                    skip = None
+                if self.skip_mode == "learned" and skip is not None:
+                    x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skip
+                elif self.skip_mode == "shared_scalar" and skip is not None:
+                    x = x + self.skip_weights[i].to(dtype=x.dtype).reshape(1, 1, 1) * skip
+                elif self.skip_mode == "unit" and skip is not None:
+                    x = x + skip
             qd = lora.q_loras[bi] if lora else None
             vd = lora.v_loras[bi] if lora else None
             x = self.blocks[bi](x, x0, qd, vd)
         x = self.final_norm(x)
-        if self.tie_embeddings:
-            logits = F.linear(x, self.tok_emb.weight)
-        else:
-            logits = self.lm_head(x)
+        logits = self.output_head(x, self.tok_emb.weight)
         logits = logits + (lora.lm_head_lora(x) if lora else 0)
         logits = self.logit_softcap * torch.tanh(logits / self.logit_softcap)
         if lora:
@@ -741,6 +993,154 @@ class GPT(nn.Module):
             return F.cross_entropy(
                 logits.float().reshape(-1, V), target_ids.reshape(-1), reduction="none").reshape(bsz, sl)
         return F.cross_entropy(logits.float().reshape(-1, logits.size(-1)), target_ids.reshape(-1), reduction="mean")
+
+    def output_head_parameters(self) -> list[nn.Parameter]:
+        return [p for p in self.output_head.parameters() if p.requires_grad]
+
+
+def parse_layer_index_set(spec: str, num_layers: int, label: str) -> set[int]:
+    layers: set[int] = set()
+    if spec.strip():
+        layers = {int(idx) for idx in spec.split(",") if idx.strip()}
+        bad = sorted(idx for idx in layers if idx < 0 or idx >= num_layers)
+        if bad:
+            raise ValueError(f"{label} layer indices out of range for num_layers={num_layers}: {bad}")
+    return layers
+
+
+def resolve_routing_modes(args: Hyperparameters) -> tuple[str, str]:
+    resid_mix_mode = "off" if not args.use_resid_mix else args.resid_mix_mode
+    resid_scale_mode = "off" if not (args.use_attn_scale or args.use_mlp_scale) else args.resid_scale_mode
+    if resid_mix_mode not in {"off", "scalar", "channel"}:
+        raise ValueError(f"resid_mix_mode must be off|scalar|channel, got {resid_mix_mode}")
+    if resid_scale_mode not in {"off", "shared_scalar", "channel"}:
+        raise ValueError(f"resid_scale_mode must be off|shared_scalar|channel, got {resid_scale_mode}")
+    return resid_mix_mode, resid_scale_mode
+
+
+def build_optimizers(args: Hyperparameters, base_model: GPT) -> tuple[list[torch.optim.Optimizer], float, float]:
+    # Optimizer split:
+    # - token embedding (Adam) uses EMBED_LR
+    # - output head (Adam) uses HEAD_LR
+    # - matrix params in transformer blocks use Muon and can be split by subsystem/depth
+    # - vectors/scalars use Adam and can be split by subsystem/depth
+    block_named_params = list(base_model.blocks.named_parameters())
+    num_encoder_layers = base_model.num_encoder_layers
+
+    def adam_with_optional_fused(param_groups: list[dict]) -> torch.optim.Adam:
+        use_fused = any(param.is_cuda for group in param_groups for param in group["params"])
+        kwargs = {"betas": (args.beta1, args.beta2), "eps": args.adam_eps}
+        if use_fused:
+            kwargs["fused"] = True
+        return torch.optim.Adam(param_groups, **kwargs)
+
+    def block_layer_idx(name: str) -> int | None:
+        prefix = name.split(".", 1)[0]
+        return int(prefix) if prefix.isdigit() else None
+
+    def depth_scale_for(layer_idx: int | None) -> float:
+        if layer_idx is None:
+            return 1.0
+        return args.early_layer_lr_scale if layer_idx < num_encoder_layers else args.late_layer_lr_scale
+
+    def mech_scale_for(name: str) -> float:
+        if any(token in name for token in ("c_kv_latent", "mixer", "local_window")):
+            return args.new_mech_lr_scale
+        return 1.0
+
+    def matrix_base_lr_for(name: str) -> float:
+        base_lr = args.matrix_lr
+        if ".attn." in name and args.attn_matrix_lr > 0:
+            base_lr = args.attn_matrix_lr
+        elif ".mlp." in name and args.mlp_matrix_lr > 0:
+            base_lr = args.mlp_matrix_lr
+        return base_lr * depth_scale_for(block_layer_idx(name)) * mech_scale_for(name)
+
+    def scalar_base_lr_for(name: str) -> float:
+        return args.scalar_lr * depth_scale_for(block_layer_idx(name)) * mech_scale_for(name)
+
+    matrix_groups: dict[float, list[Tensor]] = {}
+    scalar_groups: dict[float, list[Tensor]] = {}
+    for name, param in block_named_params:
+        if param.ndim == 2 and not any(pattern in name for pattern in CONTROL_TENSOR_NAME_PATTERNS):
+            base_lr = matrix_base_lr_for(name)
+            matrix_groups.setdefault(base_lr, []).append(param)
+        else:
+            base_lr = scalar_base_lr_for(name)
+            scalar_groups.setdefault(base_lr, []).append(param)
+    if base_model.skip_weights is not None and base_model.skip_weights.numel() > 0:
+        scalar_groups.setdefault(args.scalar_lr, []).append(base_model.skip_weights)
+
+    token_lr = args.tied_embed_lr if args.tie_embeddings else args.embed_lr
+    optimizer_tok = adam_with_optional_fused(
+        [{"params": [base_model.tok_emb.weight], "lr": token_lr, "base_lr": token_lr, "kind": "token"}]
+    )
+
+    optimizer_muons: list[Muon] = []
+    for base_lr, params in sorted(matrix_groups.items(), key=lambda item: item[0]):
+        opt = Muon(
+            params,
+            lr=base_lr,
+            momentum=args.muon_momentum,
+            backend_steps=args.muon_backend_steps,
+        )
+        for group in opt.param_groups:
+            group["base_lr"] = base_lr
+            group["kind"] = "matrix"
+        optimizer_muons.append(opt)
+
+    optimizer_scalar = adam_with_optional_fused(
+        [
+            {"params": params, "lr": base_lr, "base_lr": base_lr, "kind": "scalar"}
+            for base_lr, params in sorted(scalar_groups.items(), key=lambda item: item[0])
+        ]
+    )
+
+    optimizers: list[torch.optim.Optimizer] = [optimizer_tok, *optimizer_muons, optimizer_scalar]
+    output_head_params = base_model.output_head_parameters()
+    output_head_lr = args.head_lr * (
+        args.new_mech_lr_scale if base_model.output_head_mode not in {"tied", "dense"} else 1.0
+    )
+    if output_head_params:
+        optimizer_head = adam_with_optional_fused(
+            [{"params": output_head_params, "lr": output_head_lr, "base_lr": output_head_lr, "kind": "head"}]
+        )
+        optimizers.insert(1, optimizer_head)
+    return optimizers, token_lr, output_head_lr
+
+
+def make_lr_schedule_functions(args: Hyperparameters, max_wallclock_ms: float | None):
+    effective_warmdown_iters = args.warmdown_iters
+    if args.warmdown_fraction > 0.0:
+        effective_warmdown_iters = max(int(args.iterations * args.warmdown_fraction), 1)
+
+    def lr_mul(step: int, elapsed_ms: float) -> float:
+        if effective_warmdown_iters <= 0:
+            return 1.0
+        if max_wallclock_ms is None:
+            warmdown_start = max(args.iterations - effective_warmdown_iters, 0)
+            if warmdown_start > step:
+                return 1.0
+            progress = min(max((step - warmdown_start) / max(effective_warmdown_iters, 1), 0.0), 1.0)
+            return 1.0 - (1.0 - args.final_lr_scale) * progress
+        step_ms = elapsed_ms / max(step, 1)
+        warmdown_ms = effective_warmdown_iters * step_ms
+        remaining_ms = max(max_wallclock_ms - elapsed_ms, 0.0)
+        if remaining_ms > warmdown_ms:
+            return 1.0
+        progress = 1.0 - (remaining_ms / max(warmdown_ms, 1e-9))
+        return 1.0 - (1.0 - args.final_lr_scale) * progress
+
+    def in_final_stabilize(step: int, elapsed_ms: float) -> bool:
+        if args.final_stabilize_steps <= 0:
+            return False
+        if max_wallclock_ms is None:
+            return step >= max(args.iterations - args.final_stabilize_steps, 0)
+        step_ms = elapsed_ms / max(step, 1)
+        remaining_ms = max(max_wallclock_ms - elapsed_ms, 0.0)
+        return remaining_ms <= args.final_stabilize_steps * step_ms
+
+    return lr_mul, in_final_stabilize
 
 
 # -----------------------------
@@ -771,6 +1171,16 @@ class BatchedLinearLoRA(nn.Module):
             self.A.uniform_(-bound, bound)  # kaiming-uniform
             self.B.zero_()
 
+
+class BatchedZeroLoRA(nn.Module):
+    def __init__(self, out_features: int):
+        super().__init__()
+        self.out_features = out_features
+
+    def forward(self, x: Tensor) -> Tensor:
+        return x.new_zeros(x.size(0), x.size(1), self.out_features)
+
+
 class BatchedTTTLoRA(nn.Module):
     """All LoRA adapters for one batch: LM head and Q/V per block."""
     def __init__(self, bsz: int, model: GPT, rank: int):
@@ -781,8 +1191,12 @@ class BatchedTTTLoRA(nn.Module):
         self.q_loras = nn.ModuleList()
         self.v_loras = nn.ModuleList()
         for block in model.blocks:
-            self.q_loras.append(BatchedLinearLoRA(bsz, dim, block.attn.c_q.weight.shape[0], rank))
-            self.v_loras.append(BatchedLinearLoRA(bsz, dim, block.attn.c_v.weight.shape[0], rank))
+            if block.attn is None:
+                self.q_loras.append(BatchedZeroLoRA(dim))
+                self.v_loras.append(BatchedZeroLoRA(dim))
+            else:
+                self.q_loras.append(BatchedLinearLoRA(bsz, dim, block.attn.c_q.weight.shape[0], rank))
+                self.v_loras.append(BatchedLinearLoRA(bsz, dim, block.attn.c_v.weight.shape[0], rank))
 
     def reset(self) -> None:
         for m in self.modules():
@@ -1031,6 +1445,10 @@ def main() -> None:
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
+    latent_kv_layers = parse_layer_index_set(args.latent_kv_layers, args.num_layers, "latent kv")
+    local_attn_layers = parse_layer_index_set(args.local_attn_layers, args.num_layers, "local attention")
+    mixer_layers = parse_layer_index_set(args.mixer_layers, args.num_layers, "mixer")
+    resid_mix_mode, resid_scale_mode = resolve_routing_modes(args)
 
     if not args.tokenizer_path.endswith(".model"):
         raise ValueError(f"Script only setup for SentencePiece .model file: {args.tokenizer_path}")
@@ -1065,6 +1483,23 @@ def main() -> None:
         logit_softcap=args.logit_softcap,
         rope_base=args.rope_base,
         qk_gain_init=args.qk_gain_init,
+        use_resid_mix=args.use_resid_mix,
+        use_attn_scale=args.use_attn_scale,
+        use_mlp_scale=args.use_mlp_scale,
+        resid_mix_mode=resid_mix_mode,
+        resid_scale_mode=resid_scale_mode,
+        skip_mode=args.skip_mode,
+        skip_link_pattern=args.skip_link_pattern,
+        latent_kv_layers=latent_kv_layers,
+        latent_kv_dim=args.latent_kv_dim,
+        local_attn_layers=local_attn_layers,
+        local_attn_window=args.local_attn_window,
+        mixer_layers=mixer_layers,
+        mixer_dim=args.mixer_dim,
+        mixer_kernel=args.mixer_kernel,
+        output_head_mode=args.output_head_mode,
+        output_head_rank=args.output_head_rank,
+        output_head_bottleneck=args.output_head_bottleneck,
     ).to(device).bfloat16()
     for module in base_model.modules():
         if isinstance(module, CastedLinear):
@@ -1075,54 +1510,9 @@ def main() -> None:
     compiled_model = torch.compile(base_model, dynamic=False, fullgraph=True)
     model: nn.Module = DDP(compiled_model, device_ids=[local_rank], broadcast_buffers=False) if distributed else compiled_model
 
-    # Optimizer split:
-    # - token embedding (Adam) uses EMBED_LR
-    # - untied lm_head (Adam) uses HEAD_LR
-    # - matrix params in transformer blocks use MATRIX_LR via Muon
-    # - vectors/scalars use SCALAR_LR via Adam
-    block_named_params = list(base_model.blocks.named_parameters())
-    matrix_params = [
-        p
-        for name, p in block_named_params
-        if p.ndim == 2 and not any(pattern in name for pattern in CONTROL_TENSOR_NAME_PATTERNS)
-    ]
-    scalar_params = [
-        p
-        for name, p in block_named_params
-        if p.ndim < 2 or any(pattern in name for pattern in CONTROL_TENSOR_NAME_PATTERNS)
-    ]
-    if base_model.skip_weights.numel() > 0:
-        scalar_params.append(base_model.skip_weights)
-    token_lr = args.tied_embed_lr if args.tie_embeddings else args.embed_lr
-    optimizer_tok = torch.optim.Adam(
-        [{"params": [base_model.tok_emb.weight], "lr": token_lr, "base_lr": token_lr}],
-        betas=(args.beta1, args.beta2),
-        eps=args.adam_eps,
-        fused=True,
-    )
-    optimizer_muon = Muon(
-        matrix_params,
-        lr=args.matrix_lr,
-        momentum=args.muon_momentum,
-        backend_steps=args.muon_backend_steps,
-    )
-    for group in optimizer_muon.param_groups:
-        group["base_lr"] = args.matrix_lr
-    optimizer_scalar = torch.optim.Adam(
-        [{"params": scalar_params, "lr": args.scalar_lr, "base_lr": args.scalar_lr}],
-        betas=(args.beta1, args.beta2),
-        eps=args.adam_eps,
-        fused=True,
-    )
-    optimizers: list[torch.optim.Optimizer] = [optimizer_tok, optimizer_muon, optimizer_scalar]
-    if base_model.lm_head is not None:
-        optimizer_head = torch.optim.Adam(
-            [{"params": [base_model.lm_head.weight], "lr": args.head_lr, "base_lr": args.head_lr}],
-            betas=(args.beta1, args.beta2),
-            eps=args.adam_eps,
-            fused=True,
-        )
-        optimizers.insert(1, optimizer_head)
+    optimizers, token_lr, output_head_lr = build_optimizers(args, base_model)
+    optimizer_muons = [opt for opt in optimizers if isinstance(opt, Muon)]
+    output_head_params = base_model.output_head_parameters()
 
     n_params = sum(p.numel() for p in base_model.parameters())
     log0(f"model_params:{n_params}")
@@ -1131,8 +1521,32 @@ def main() -> None:
     log0(f"attention_mode:gqa num_heads:{args.num_heads} num_kv_heads:{args.num_kv_heads}")
     log0(
         f"tie_embeddings:{args.tie_embeddings} embed_lr:{token_lr} "
-        f"head_lr:{args.head_lr if base_model.lm_head is not None else 0.0} "
+        f"head_lr:{(output_head_lr if output_head_params else 0.0):.4f} "
         f"matrix_lr:{args.matrix_lr} scalar_lr:{args.scalar_lr}"
+    )
+    log0(
+        f"control_modes:resid_mix={args.use_resid_mix} attn_scale={args.use_attn_scale} "
+        f"mlp_scale={args.use_mlp_scale} skip_mode={args.skip_mode}"
+    )
+    log0(
+        f"routing_modes:resid_mix_mode={resid_mix_mode} resid_scale_mode={resid_scale_mode} "
+        f"skip_link_pattern={args.skip_link_pattern}"
+    )
+    log0(
+        f"latent_kv:layers={','.join(str(i) for i in sorted(latent_kv_layers)) if latent_kv_layers else 'none'} "
+        f"latent_kv_dim:{args.latent_kv_dim}"
+    )
+    log0(
+        f"local_attn:layers={','.join(str(i) for i in sorted(local_attn_layers)) if local_attn_layers else 'none'} "
+        f"window:{args.local_attn_window}"
+    )
+    log0(
+        f"sequence_mixer:layers={','.join(str(i) for i in sorted(mixer_layers)) if mixer_layers else 'none'} "
+        f"mixer_dim:{args.mixer_dim} mixer_kernel:{args.mixer_kernel}"
+    )
+    log0(
+        f"output_head:mode={base_model.output_head_mode} rank={args.output_head_rank} "
+        f"bottleneck={args.output_head_bottleneck}"
     )
     log0(
         f"train_batch_tokens:{args.train_batch_tokens} train_seq_len:{args.train_seq_len} "
@@ -1153,16 +1567,7 @@ def main() -> None:
 
     max_wallclock_ms = 1000.0 * args.max_wallclock_seconds if args.max_wallclock_seconds > 0 else None
 
-    def lr_mul(step: int, elapsed_ms: float) -> float:
-        if args.warmdown_iters <= 0:
-            return 1.0
-        if max_wallclock_ms is None:
-            warmdown_start = max(args.iterations - args.warmdown_iters, 0)
-            return max((args.iterations - step) / max(args.warmdown_iters, 1), 0.0) if warmdown_start <= step < args.iterations else 1.0
-        step_ms = elapsed_ms / max(step, 1)
-        warmdown_ms = args.warmdown_iters * step_ms
-        remaining_ms = max(max_wallclock_ms - elapsed_ms, 0.0)
-        return remaining_ms / max(warmdown_ms, 1e-9) if remaining_ms <= warmdown_ms else 1.0
+    lr_mul, in_final_stabilize = make_lr_schedule_functions(args, max_wallclock_ms)
 
     # Warmup primes the compiled forward/backward/optimizer paths, then we restore the
     # initial weights/optimizer state so measured training starts from the true init.
@@ -1252,12 +1657,21 @@ def main() -> None:
 
         frac = min(step / args.muon_momentum_warmup_steps, 1.0) if args.muon_momentum_warmup_steps > 0 else 1.0
         muon_momentum = (1 - frac) * args.muon_momentum_warmup_start + frac * args.muon_momentum
-        for group in optimizer_muon.param_groups:
-            group["momentum"] = muon_momentum
+        for muon_opt in optimizer_muons:
+            for group in muon_opt.param_groups:
+                group["momentum"] = muon_momentum
 
+        stabilize = in_final_stabilize(step, elapsed_ms)
         for opt in optimizers:
             for group in opt.param_groups:
-                group["lr"] = group["base_lr"] * scale
+                kind = group.get("kind", "backbone")
+                group_scale = args.final_stabilize_lr_scale if stabilize else scale
+                if stabilize:
+                    if kind == "head":
+                        group_scale *= args.final_head_lr_scale
+                    elif kind != "token":
+                        group_scale *= args.final_backbone_lr_scale
+                group["lr"] = group["base_lr"] * group_scale
 
         if args.grad_clip_norm > 0:
             torch.nn.utils.clip_grad_norm_(base_model.parameters(), args.grad_clip_norm)
@@ -1370,3 +1784,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    def adam_with_optional_fused(param_groups: list[dict]) -> torch.optim.Adam:
+        use_fused = any(param.is_cuda for group in param_groups for param in group["params"])
+        kwargs = {"betas": (args.beta1, args.beta2), "eps": args.adam_eps}
+        if use_fused:
+            kwargs["fused"] = True
+        return torch.optim.Adam(param_groups, **kwargs)

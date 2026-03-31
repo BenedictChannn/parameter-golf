@@ -98,7 +98,7 @@ Move from “buy more steps” to “reallocate capacity more intelligently.”
 
 ## T-20260329-B: Architecture Necessity Audit
 
-**Status:** active
+**Status:** completed
 
 **Goal**  
 Break the model into major components and ask, one family at a time, whether each piece is actually earning its bytes, compute, and optimization complexity.
@@ -466,3 +466,318 @@ Is the current `9L / MLP2 / 98304 / q4-kv2` frontier leaving quality on the tabl
 - main conclusion: output path is a first-class frontier family on this challenge, not an afterthought
 - secondary conclusion: the best-tested configuration now uses untied outputs, tighter clipping, and a somewhat faster output-head learning rate
 - next pivot: either run one narrow local tranche around the untied output path, or switch families and test residual-control or skip-topology simplification from the new anchor
+
+## T-20260330-G: Untied Output Local Calibration
+
+**Status:** completed
+
+**Goal**  
+Test whether the current best line, [`AL-20260329-030`](./experiments.tsv), still has local output-path headroom nearby before we pivot to a colder component family.
+
+**Main question**  
+Is `untied + LOGIT_SOFTCAP=20 + HEAD_LR=0.012` already near the local optimum, or can a tighter nearby calibration beat it?
+
+**Why this tranche exists**
+
+- tranche F ended on an active win, not a flat result
+- the most compute-worthy next move is to exploit the still-warm local neighborhood before abandoning the family
+- this is also a clean test of the new manifest-driven harness, because the tranche is env-only and tightly scoped
+
+**Base controls**
+
+- anchor shape: `9L / MLP2 / MODEL_DIM=512 / TRAIN_BATCH_TOKENS=98304 / NUM_HEADS=4 / NUM_KV_HEADS=2 / TIE_EMBEDDINGS=0`
+- keep `MAX_WALLCLOCK_SECONDS=600`
+- keep primary metric `final_int8_ttt_lora`
+- keep tokenizer and validation semantics unchanged
+- keep all non-output-path optimizer settings at the current best defaults
+
+**Anchor**
+
+- [`AL-20260329-030`](./experiments.tsv) at `1.3564`, 15.80 MB
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | What it teaches |
+|---|---|---|---|---|
+| `G1` | `LOGIT_SOFTCAP=15, HEAD_LR=0.012` | Test stronger clipping | The current winner may still be slightly overconfident, so tighter clipping could help further | Whether the softcap optimum is below `20` |
+| `G2` | `LOGIT_SOFTCAP=25, HEAD_LR=0.012` | Test slightly looser clipping | The current winner may already be slightly over-clipped, so relaxing to `25` could help | Whether `20` was too aggressive rather than just better than `40` |
+| `G3` | `LOGIT_SOFTCAP=20, HEAD_LR=0.010` | Test a slightly slower head LR | The useful direction may be upward from `0.008`, but the true local optimum could still sit below `0.012` | Whether the head-LR optimum is slightly lower than the current best |
+| `G4` | `LOGIT_SOFTCAP=20, HEAD_LR=0.016` | Test a slightly faster head LR | The untied head may still be under-updated | Whether the head-LR optimum is still above the current best |
+| `G5` | `LOGIT_SOFTCAP=15, HEAD_LR=0.016` | Test the strongest local combo | If both “more clipping” and “faster head updates” are the right directions, they may stack | Whether the local output-path gains are additive rather than isolated |
+
+**Why these five are worth the compute**
+
+- `G1` and `G2` bracket the current softcap winner tightly instead of wasting compute on distant values we already weakened
+- `G3` and `G4` bracket the current head-LR winner tightly for the same reason
+- `G5` is the one justified combo test because it stacks the two strongest local “more” directions from tranche F
+
+**Decision rule for G**
+
+- if `G1` or `G2` wins, run one final narrow softcap confirmation before pivoting families
+- if `G3` or `G4` wins, run one final head-LR confirmation before pivoting families
+- if `G5` wins, the output path is still actively compounding and deserves one more mini-tranche
+- if all five lose clearly, close the output-path family for now and pivot to residual-control or skip-topology simplification
+
+**Results**
+
+- [`AL-20260330-001`](./experiments.tsv) (`G1`, `LOGIT_SOFTCAP=15, HEAD_LR=0.012`) landed at `1.3564` and 15.81 MB. This effectively tied the current best at 4 decimals, but it was not clearly better and came in slightly larger.
+- [`AL-20260330-002`](./experiments.tsv) (`G2`, `LOGIT_SOFTCAP=25, HEAD_LR=0.012`) landed at `1.3570` and 15.79 MB. Slightly looser clipping lost clear ground.
+- [`AL-20260330-003`](./experiments.tsv) (`G3`, `LOGIT_SOFTCAP=20, HEAD_LR=0.010`) landed at `1.3599` and 15.80 MB. A slightly slower head LR was clearly worse.
+- [`AL-20260330-004`](./experiments.tsv) (`G4`, `LOGIT_SOFTCAP=20, HEAD_LR=0.016`) landed at `1.3574` and 15.81 MB. A slightly faster head LR was also worse.
+- [`AL-20260330-005`](./experiments.tsv) (`G5`, `LOGIT_SOFTCAP=15, HEAD_LR=0.016`) landed at `1.3565` and 15.82 MB. The strongest local combo stayed extremely close, but still did not beat the anchor.
+
+**Current reading**
+
+- the local output-path neighborhood is now much better mapped
+- `LOGIT_SOFTCAP=20` still looks like the best local point we have tested
+- `HEAD_LR=0.012` also still looks like the best local point we have tested
+- there may still be noise-scale room in the family, but not enough to justify another pure scalar micro-sweep right away
+
+**Outcome**
+
+- best result from this tranche: no new winner; the anchor [`AL-20260329-030`](./experiments.tsv) remains best at `1.3564`
+- main conclusion: the output family is still strong, but its local scalar neighborhood now looks mostly exhausted
+- next pivot: move to residual-control or skip-topology simplification rather than another immediate output micro-sweep
+
+## T-20260330-H: Residual Control Simplification
+
+**Status:** active
+
+**Goal**  
+Test whether the current best line is carrying unnecessary residual-control and skip-path complexity, and whether a simpler residual system can match or beat it.
+
+**Main question**  
+Are `resid_mix`, learned residual scales, and learned skip weights still helping on the current frontier, or are they now overbuilt baggage?
+
+**Why this tranche exists**
+
+- tranche G mapped the local output-path neighborhood closely enough that another scalar micro-sweep is not the best use of compute
+- residual controls and skip topology remain under-tested and are one of the most distinctive architecture families in this script
+- this family can now be tested cleanly with env vars instead of a new code edit for every ablation
+
+**Base controls**
+
+- anchor shape: `9L / MLP2 / MODEL_DIM=512 / TRAIN_BATCH_TOKENS=98304 / NUM_HEADS=4 / NUM_KV_HEADS=2 / TIE_EMBEDDINGS=0 / LOGIT_SOFTCAP=20 / HEAD_LR=0.012`
+- keep `MAX_WALLCLOCK_SECONDS=600`
+- keep primary metric `final_int8_ttt_lora`
+- keep tokenizer and validation semantics unchanged
+
+**Anchor**
+
+- [`AL-20260329-030`](./experiments.tsv) at `1.3564`, 15.80 MB
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | What it teaches |
+|---|---|---|---|---|
+| `H1` | `USE_RESID_MIX=0` | Remove learned input-stream mixing | `resid_mix` may be unnecessary now that the frontier is better trained and better calibrated | Whether the initial-embedding blend is still earning its complexity |
+| `H2` | `USE_ATTN_SCALE=0, USE_MLP_SCALE=0` | Replace learned residual scales with unit residuals | Per-channel learned residual scales may be optimization baggage rather than useful expressivity | Whether the model wants simpler fixed residual addition |
+| `H3` | `SKIP_MODE=unit` | Keep skip topology but remove learned skip weights | The skip structure may help, but the learned skip weights may be unnecessary | Whether skip learning matters more than skip existence |
+| `H4` | `SKIP_MODE=off` | Remove skip topology entirely | The encoder/decoder-style skips may no longer be earning their keep | Whether the topology itself is the useful part or just historical carry-over |
+| `H5` | `USE_RESID_MIX=0, USE_ATTN_SCALE=0, USE_MLP_SCALE=0, SKIP_MODE=unit` | Test a coherent simplification package | Several individually small simplifications may stack better than one-at-a-time ablations | Whether the residual family wants to simplify as a system, not just by one knob |
+
+**Why these five are worth the compute**
+
+- `H1`, `H2`, and `H3` isolate the three main learned-control families directly
+- `H4` asks the stronger topology question instead of only the parameterization question
+- `H5` is the one justified combo run because residual controls are likely to interact
+
+**Decision rule for H**
+
+- if `H1` wins, the next residual tranche should focus on input-stream mixing and residual routing
+- if `H2` wins, the next residual tranche should simplify control parameterization further
+- if `H3` wins but `H4` loses, keep skips but stop learning their weights
+- if `H4` wins, skip topology is now a serious simplification target
+- if `H5` wins, the residual family likely wants a broader simplification pass
+- if all five lose clearly, residual controls are probably not the next bottleneck and we should pivot elsewhere
+
+**Results so far**
+
+- [`AL-20260330-006`](./experiments.tsv) (`H1`, `USE_RESID_MIX=0`) landed at `1.3763` and 15.82 MB. This is a clear regression from the `1.3564` anchor, so learned input-stream mixing is still materially helping on the current frontier.
+- [`AL-20260330-007`](./experiments.tsv) (`H2`, `USE_ATTN_SCALE=0, USE_MLP_SCALE=0`) landed at `1.3666` and 15.64 MB. This also regressed clearly, though less than `H1`, so the learned residual scales still appear to be earning their keep.
+- [`AL-20260330-008`](./experiments.tsv) (`H3`, `SKIP_MODE=unit`) landed at `1.3568` and 15.80 MB. This nearly tied the `1.3564` anchor, so the skip topology may matter more than learning per-skip weights.
+- [`AL-20260330-009`](./experiments.tsv) (`H4`, `SKIP_MODE=off`) landed at `1.3610` and 15.81 MB. This lost much more clearly than `H3`, so the skip topology itself is useful and the learned skip weighting is the more plausible simplification target.
+- [`AL-20260330-010`](./experiments.tsv) (`H5`, `USE_RESID_MIX=0, USE_ATTN_SCALE=0, USE_MLP_SCALE=0, SKIP_MODE=unit`) landed at `1.3807` and 15.65 MB. The full simplification package failed badly, so there is no evidence for a hidden “all together is better” interaction.
+
+**Current reading**
+
+- the residual family is not the next frontier family
+- `resid_mix` is clearly valuable
+- learned residual scales are also useful
+- the skip topology itself is useful
+- the only near-live simplification result is that unit skip weights nearly match learned skip weights
+
+**Outcome**
+
+- best result from this tranche: no new winner; the anchor [`AL-20260329-030`](./experiments.tsv) remains best at `1.3564`
+- main conclusion: generic residual simplification is not the next breakthrough path, but the model likely does not need learned skip weights to get most of the skip benefit
+- next pivot: move to a bold architecture tranche, most likely latent-KV attention compression or a hybrid recurrent mixer
+
+## T-20260330-I: Latent-KV Attention Audit
+
+**Status:** completed
+
+**Goal**  
+Test whether the current attention block is over-spending on full K/V structure, and whether a latent-KV bottleneck can preserve quality while buying speed or size headroom.
+
+**Main question**  
+Can compressed K/V structure keep most of the useful attention behavior under the same `600s` training budget?
+
+**Why this tranche exists**
+
+- tranche H mostly closed the generic residual-simplification path
+- the next worthwhile step is to change the block, not prune one more scalar
+- latent-KV attention is a bold but still interpretable architecture change
+
+**Base controls**
+
+- anchor shape: `9L / MLP2 / MODEL_DIM=512 / TRAIN_BATCH_TOKENS=98304 / NUM_HEADS=4 / NUM_KV_HEADS=2 / TIE_EMBEDDINGS=0 / LOGIT_SOFTCAP=20 / HEAD_LR=0.012`
+- keep `MAX_WALLCLOCK_SECONDS=600`
+- keep primary metric `final_int8_ttt_lora`
+- keep tokenizer and validation semantics unchanged
+- keep `MIXER_LAYERS` disabled for tranche I
+
+**Anchor**
+
+- [`AL-20260329-030`](./experiments.tsv) at `1.3564`, 15.80 MB
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | What it teaches |
+|---|---|---|---|---|
+| `I1` | `LATENT_KV_LAYERS=0,1,2,3,4,5,6,7,8`, `LATENT_KV_DIM=128` | Mild latent-KV compression across all layers | There is real redundancy in the full K/V path, and mild compression may preserve quality almost intact | Whether latent-KV is viable at all |
+| `I2` | `LATENT_KV_LAYERS=0,1,2,3,4,5,6,7,8`, `LATENT_KV_DIM=64` | Stronger latent-KV compression across all layers | The frontier may tolerate much more K/V compression than we expect | Whether the idea scales beyond a mild bottleneck |
+| `I3` | `LATENT_KV_LAYERS=5,6,7,8`, `LATENT_KV_DIM=64` | Compress only the upper layers | Later layers may tolerate K/V compression better than earlier ones | Whether late compression is the cleanest placement |
+| `I4` | `LATENT_KV_LAYERS=0,1,2,3`, `LATENT_KV_DIM=64` | Compress only the lower layers | Early layers may be the cheaper place to simplify attention while preserving later fidelity | Whether early compression is the cleanest placement |
+| `I5` | `NUM_LAYERS=10`, `LATENT_KV_LAYERS=0,1,2,3,4,5,6,7,8,9`, `LATENT_KV_DIM=64` | Reinvest the stronger latent-KV savings into more depth | The stronger compression line may only make sense if its saved budget is converted into one more layer | Whether stronger compressed attention plus extra depth beats the plain transformer frontier |
+
+**Why these five are worth the compute**
+
+- every run tests a distinct mechanism-level question, not a scalar retune
+- the tranche asks both whether latent-KV works and where it works
+- `I5` tests the most important second-order question: what to do with the savings if the idea works
+
+**Results so far**
+
+- [`AL-20260330-011`](./experiments.tsv) (`I1`, all-layer `LATENT_KV_DIM=128`) landed at `1.3718` and 15.83 MB. The run trained cleanly, stayed under the size cap, and kept roughly the same step budget as the anchor, but it still lost clearly on quality. It also took `801s` for TTT eval, so the first latent-KV form did not buy a cleaner evaluation path either.
+- [`AL-20260330-012`](./experiments.tsv) (`I2`, all-layer `LATENT_KV_DIM=64`) landed at `1.3865` and 14.73 MB. It bought slightly more steps and much more artifact headroom than `I1`, but it lost further on quality and still took `795s` in TTT eval.
+- [`AL-20260330-013`](./experiments.tsv) (`I3`, upper-only `LATENT_KV_DIM=64`) landed at `1.3685` and 15.32 MB. This was the best latent-KV run in the tranche: clearly better than both all-layer variants, but still well behind the `1.3564` frontier.
+- [`AL-20260330-014`](./experiments.tsv) (`I4`, lower-only `LATENT_KV_DIM=64`) landed at `1.3737` and 15.30 MB. This improved over all-layer latent64 but trailed the upper-only placement, so the upper stack is the cleaner place to localize compression.
+- [`AL-20260330-015`](./experiments.tsv) (`I5`, `10L` + all-layer `LATENT_KV_DIM=64`) landed at `1.3883` and 15.84 MB. Reinvesting the stronger all-layer compression into another layer did not rescue the family; it lost too many steps and still stayed weak on quality.
+
+**Current reading**
+
+- latent-KV is technically viable in this codebase: the model trains, serializes, quantizes, and evaluates without breaking challenge constraints
+- but mild all-layer latent-KV is not an immediate drop-in win
+- stronger all-layer compression makes the loss worse, not better
+- the family is placement-sensitive: upper-only compression is meaningfully better than lower-only or all-layer compression
+- reinvesting naive all-layer compression into extra depth does not rescue it
+
+**Outcome**
+
+- no new frontier run; [`AL-20260329-030`](./experiments.tsv) remains best at `1.3564`
+- best latent-KV run: [`AL-20260330-013`](./experiments.tsv) at `1.3685`
+- main conclusion: latent-KV is not a dead idea, but its first useful regime is localized upper-layer compression, not full-stack compression
+- next pivot: move to a new bold architecture family unless we decide the upper-only latent-KV line is worth a second-generation redesign
+
+## T-20260330-J: Hybrid Sequence Mixer Audit
+
+**Status:** active
+
+**Goal**  
+Test whether some transformer attention layers can be replaced by a cheaper state-space-inspired sequence mixer without giving back too much quality under the same `600s` budget.
+
+**Main question**  
+Does every layer really need full attention, or can a hybrid stack keep most of the quality while using a cheaper mixer in selected layers?
+
+**Why this tranche exists**
+
+- tranche H mostly closed the generic residual-simplification path
+- the next worthwhile move is architectural, not scalar
+- a hybrid mixer tests a different modeling principle rather than another local transformer retune
+
+**Base controls**
+
+- anchor shape: `9L / MLP2 / MODEL_DIM=512 / TRAIN_BATCH_TOKENS=98304 / NUM_HEADS=4 / NUM_KV_HEADS=2 / TIE_EMBEDDINGS=0 / LOGIT_SOFTCAP=20 / HEAD_LR=0.012`
+- keep `MAX_WALLCLOCK_SECONDS=600`
+- keep primary metric `final_int8_ttt_lora`
+- keep tokenizer and validation semantics unchanged
+- keep `MIXER_DIM=256`, `MIXER_KERNEL=4` fixed across the tranche
+
+**Anchor**
+
+- [`AL-20260329-030`](./experiments.tsv) at `1.3564`, 15.80 MB
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | What it teaches |
+|---|---|---|---|---|
+| `J1` | `MIXER_LAYERS=3,4,5` | Replace the middle three attention layers | The middle of the stack may be the safest place to use a cheaper sequence mixer | Whether the hybrid idea is viable at all |
+| `J2` | `MIXER_LAYERS=2,3,4,5,6` | Replace the middle five layers | More of the stack may be replaceable than we expect | Whether the hybrid win, if any, scales beyond a light swap |
+| `J3` | `MIXER_LAYERS=1,3,5,7` | Alternate attention and mixer layers | Alternating global routing and cheaper local mixing may work better than block replacement | Whether interleaving beats contiguous replacement |
+| `J4` | `MIXER_LAYERS=0,1,2,3` | Replace the lower four layers | Early layers may tolerate cheaper mixing while later attention stays full-fidelity | Whether lower-layer replacement is the cleaner placement |
+| `J5` | `MIXER_LAYERS=5,6,7,8` | Replace the upper four layers | Later layers may be the better place to save attention cost | Whether upper-layer replacement is the cleaner placement |
+
+**Why these five are worth the compute**
+
+- every run tests a distinct placement theory rather than a scalar retune
+- the tranche asks a real architectural question: where, if anywhere, can attention be replaced?
+- if all five lose, that still teaches us something strong about the current frontier
+
+## Queued Manifest Roadmap
+
+These are the next six tranche manifests prepared for the lab. All six are now runnable with the current codebase. The sequential program manifest is [`P-20260330-JO`](./program_manifests/20260330-J-to-O.json).
+
+### T-20260330-J - Hybrid Sequence Mixer Audit
+
+- Manifest: [`20260330-J-hybrid-sequence-mixer.json`](./tranche_manifests/20260330-J-hybrid-sequence-mixer.json)
+- Status: completed
+- Outcome: clear win; [`AL-20260330-104`](./experiments.tsv) is the new best valid frontier at `1.3488`, and [`AL-20260330-103`](./experiments.tsv) also kept the family alive
+- Why it is worthy:
+- it tests whether some layers can stop using full attention entirely
+- it is the cleanest bold replacement family already supported by the repo
+
+### T-20260330-K - Output Head Architecture Audit
+
+- Manifest: [`20260330-K-output-head-architecture.json`](./tranche_manifests/20260330-K-output-head-architecture.json)
+- Status: completed
+- Outcome: failed as a frontier family on the current backbone; the dense untied head still wins clearly
+- Why it is worthy:
+- output path has already produced some of the largest gains in the project
+- the next good question is output-head architecture, not more scalar tuning
+
+### T-20260330-L - Local-Global Attention Split
+
+- Manifest: [`20260330-L-local-global-attention.json`](./tranche_manifests/20260330-L-local-global-attention.json)
+- Status: blocked
+- Outcome: [`AL-20260330-111`](./experiments.tsv) crashed before the first metric, so the family is unresolved and needs a debug tranche
+- Why it is worthy:
+- attention geometry already mattered a lot
+- the next structural question is whether global attention is needed in every layer
+
+### T-20260330-M - Skip and Residual Redesign
+
+- Manifest: [`20260330-M-skip-residual-redesign.json`](./tranche_manifests/20260330-M-skip-residual-redesign.json)
+- Status: completed
+- Outcome: clear secondary win; [`AL-20260330-120`](./experiments.tsv) reached `1.3534` and shared scalar skip gates were also independently useful
+- Why it is worthy:
+- tranche H showed deletion is mostly the wrong question
+- the live path is redesigning routing, not removing it
+
+### T-20260330-N - Mechanism-Specific Learning Rates
+
+- Manifest: [`20260330-N-mechanism-specific-lrs.json`](./tranche_manifests/20260330-N-mechanism-specific-lrs.json)
+- Status: completed
+- Outcome: supportive but not transformative; several splits nearly tied the old frontier, but none challenged the new hybrid-mixer best
+- Why it is worthy:
+- some architecture failures may actually be optimization failures
+- this gives future bold mechanisms a fairer training regime
+
+### T-20260330-O - Quantization-Aware Warmdown
+
+- Manifest: [`20260330-O-quantization-aware-warmdown.json`](./tranche_manifests/20260330-O-quantization-aware-warmdown.json)
+- Status: completed
+- Outcome: mostly wrong; broader warmdown and stabilization variants hurt, while head-only cooldown only managed a near-tie to the old pre-program best
+- Why it is worthy:
+- the submitted model is compressed, not the raw fp model
+- challenge-specific end-of-training behavior may matter more than generic schedule quality

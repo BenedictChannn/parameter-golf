@@ -1,0 +1,94 @@
+{
+  "tranche_id": "T-20260330-L",
+  "title": "Local-Global Attention Split",
+  "research_question": "Does the current model really need full global attention in every layer, or can a local-global split preserve quality while reducing compute pressure?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260329-030",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "l1-lower-local-256",
+      "exp_id": "AL-20260330-111",
+      "goal": "Replace lower-layer global attention with local-window attention while keeping upper layers global.",
+      "hypothesis": "Early layers may not need global context yet, so local attention in the lower stack can save cost without hurting the final score much.",
+      "what_it_teaches": "Whether local attention is safest in the early stack.",
+      "why_worthy": "This targets a major structural assumption: global attention everywhere may be overkill in a small model.",
+      "description": "use a 256-token local window in the lower four attention layers",
+      "env": {
+        "LOCAL_ATTN_LAYERS": "0,1,2,3",
+        "LOCAL_ATTN_WINDOW": "256"
+      }
+    },
+    {
+      "name": "l2-upper-local-256",
+      "exp_id": "AL-20260330-112",
+      "goal": "Flip the placement and test local attention in the upper stack instead.",
+      "hypothesis": "Later layers may mostly refine local features, letting the upper stack use cheaper local attention while lower layers keep global routing.",
+      "what_it_teaches": "Whether local attention is safer late than early.",
+      "why_worthy": "This directly separates two opposing placement theories.",
+      "description": "use a 256-token local window in the upper four attention layers",
+      "env": {
+        "LOCAL_ATTN_LAYERS": "5,6,7,8",
+        "LOCAL_ATTN_WINDOW": "256"
+      }
+    },
+    {
+      "name": "l3-middle-local-256",
+      "exp_id": "AL-20260330-113",
+      "goal": "Test whether the middle of the network is the easiest place to localize attention.",
+      "hypothesis": "The middle stack may tolerate local attention best if lower layers build representations and upper layers handle global refinement.",
+      "what_it_teaches": "Whether a middle local band is cleaner than top-only or bottom-only.",
+      "why_worthy": "This gives a true third structural pattern, not just a mirror image of the first two.",
+      "description": "use a 256-token local window in the middle four attention layers",
+      "env": {
+        "LOCAL_ATTN_LAYERS": "2,3,4,5",
+        "LOCAL_ATTN_WINDOW": "256"
+      }
+    },
+    {
+      "name": "l4-alternating-local-256",
+      "exp_id": "AL-20260330-114",
+      "goal": "Interleave local and global attention instead of grouping them by region.",
+      "hypothesis": "Alternating local and global layers may let the model refresh global context without paying for it in every block.",
+      "what_it_teaches": "Whether alternation beats contiguous placement.",
+      "why_worthy": "This tests a distinct architecture theory rather than just another location choice.",
+      "description": "alternate local-window and global attention layers through the stack",
+      "env": {
+        "LOCAL_ATTN_LAYERS": "1,3,5,7",
+        "LOCAL_ATTN_WINDOW": "256"
+      }
+    },
+    {
+      "name": "l5-lower-local-128",
+      "exp_id": "AL-20260330-115",
+      "goal": "Push the local-global idea harder after the safest lower-stack pattern.",
+      "hypothesis": "If lower-stack local attention is the right placement, a smaller window may buy meaningful savings before quality collapses.",
+      "what_it_teaches": "Whether the local-global split has real room to trade locality for efficiency.",
+      "why_worthy": "This tells us whether a promising local placement has headroom or immediately cliffs.",
+      "description": "use a 128-token local window in the lower four attention layers",
+      "env": {
+        "LOCAL_ATTN_LAYERS": "0,1,2,3",
+        "LOCAL_ATTN_WINDOW": "128"
+      }
+    }
+  ]
+}

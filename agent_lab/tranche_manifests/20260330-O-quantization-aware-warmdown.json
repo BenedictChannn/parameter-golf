@@ -1,0 +1,96 @@
+{
+  "tranche_id": "T-20260330-O",
+  "title": "Quantization-Aware Warmdown",
+  "research_question": "Can the last part of training make the final int8+zlib submission behave better after quantization, even if the raw fp training objective looks similar?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260329-030",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "o1-longer-tail",
+      "exp_id": "AL-20260330-126",
+      "goal": "Make the end of training decay more gently before export.",
+      "hypothesis": "A longer warmdown may leave weights in a smoother, more quantization-friendly state without hurting the final compressed score.",
+      "what_it_teaches": "Whether the compressed model wants a gentler finish than the fp model.",
+      "why_worthy": "This is directly tied to the challenge artifact we actually submit, not generic training aesthetics.",
+      "description": "extend the final learning-rate decay tail before export",
+      "env": {
+        "WARMDOWN_FRACTION": "0.25",
+        "FINAL_LR_SCALE": "0.05"
+      }
+    },
+    {
+      "name": "o2-early-warmdown",
+      "exp_id": "AL-20260330-127",
+      "goal": "Start the warmdown earlier to test a more conservative finish.",
+      "hypothesis": "The current schedule may stay too hot too long for the compressed model, and an earlier tail could improve post-quantization behavior.",
+      "what_it_teaches": "Whether warmdown timing matters more than warmdown length.",
+      "why_worthy": "This tests a different scheduling mechanism from simply lengthening the tail.",
+      "description": "start the final decay earlier with the same overall 600s budget",
+      "env": {
+        "WARMDOWN_FRACTION": "0.40",
+        "FINAL_LR_SCALE": "0.05"
+      }
+    },
+    {
+      "name": "o3-final-stabilize",
+      "exp_id": "AL-20260330-128",
+      "goal": "Insert a short low-LR stabilization phase right before export.",
+      "hypothesis": "A brief cooldown at the end may reduce quantization damage even if the raw fp model changes very little.",
+      "what_it_teaches": "Whether a dedicated export-stabilization phase is better than a smoother global schedule.",
+      "why_worthy": "This is the most challenge-specific schedule idea in the tranche.",
+      "description": "add a short low-LR stabilization phase before serialization",
+      "env": {
+        "FINAL_STABILIZE_STEPS": "128",
+        "FINAL_STABILIZE_LR_SCALE": "0.10"
+      }
+    },
+    {
+      "name": "o4-head-only-cooldown",
+      "exp_id": "AL-20260330-129",
+      "goal": "Stabilize the output path more than the backbone before export.",
+      "hypothesis": "The output head may be especially sensitive to quantization, so cooling it more than the rest of the model could improve compressed behavior.",
+      "what_it_teaches": "Whether post-quantization fragility is concentrated in the output path.",
+      "why_worthy": "Output path has already proven to be first-class in this project, so it is a plausible place for quantization fragility to live.",
+      "description": "apply a stronger final cooldown to the output head than to the backbone",
+      "env": {
+        "FINAL_HEAD_LR_SCALE": "0.05",
+        "FINAL_BACKBONE_LR_SCALE": "0.15"
+      }
+    },
+    {
+      "name": "o5-two-phase-quant-tail",
+      "exp_id": "AL-20260330-130",
+      "goal": "Combine a smoother warmdown with a final stabilization phase.",
+      "hypothesis": "If quantization-friendly finishing is real, the best version may need both a gentler tail and a short stabilization window.",
+      "what_it_teaches": "Whether the schedule effects stack or whether only one tail mechanism matters.",
+      "why_worthy": "This is the tranche's justified combo run because the whole point is end-of-training interaction effects.",
+      "description": "combine a longer warmdown and a short final stabilization phase",
+      "env": {
+        "WARMDOWN_FRACTION": "0.25",
+        "FINAL_LR_SCALE": "0.05",
+        "FINAL_STABILIZE_STEPS": "128",
+        "FINAL_STABILIZE_LR_SCALE": "0.10"
+      }
+    }
+  ]
+}

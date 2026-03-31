@@ -1,0 +1,95 @@
+{
+  "tranche_id": "T-20260330-K",
+  "title": "Output Head Architecture Audit",
+  "research_question": "Now that the output path is proven important, what head architecture best turns hidden states into logits under the parameter-golf budget?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260329-030",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "k1-low-rank-128",
+      "exp_id": "AL-20260330-106",
+      "goal": "Test whether a low-rank untied output head can keep most of the expressivity win while using fewer bytes.",
+      "hypothesis": "The current untied dense head may be overbuilt, and a low-rank factorization with rank 128 can preserve the useful part of the gain.",
+      "what_it_teaches": "Whether output expressivity can be made more parameter-efficient without collapsing quality.",
+      "why_worthy": "The output path already gave some of the biggest wins in the project, so architectural compression here is high leverage.",
+      "description": "replace the dense untied head with a rank-128 low-rank output head",
+      "env": {
+        "OUTPUT_HEAD_MODE": "low_rank",
+        "OUTPUT_HEAD_RANK": "128"
+      }
+    },
+    {
+      "name": "k2-low-rank-64",
+      "exp_id": "AL-20260330-107",
+      "goal": "Push the low-rank idea harder to see where the head architecture breaks.",
+      "hypothesis": "The logits may be structured enough that a rank-64 head still preserves most of the useful behavior.",
+      "what_it_teaches": "Whether low-rank heads degrade gracefully or cliff sharply.",
+      "why_worthy": "This gives a clean slope for the family instead of a single low-rank point.",
+      "description": "replace the dense untied head with a rank-64 low-rank output head",
+      "env": {
+        "OUTPUT_HEAD_MODE": "low_rank",
+        "OUTPUT_HEAD_RANK": "64"
+      }
+    },
+    {
+      "name": "k3-bottleneck-256",
+      "exp_id": "AL-20260330-108",
+      "goal": "Test a nonlinear bottleneck head instead of a plain linear map.",
+      "hypothesis": "A two-stage bottleneck head may express a better logit mapping than a single dense matrix at similar cost.",
+      "what_it_teaches": "Whether the output path wants more structure, not just fewer parameters.",
+      "why_worthy": "This is a genuinely different output-head mechanism, not just another rank value.",
+      "description": "use a bottleneck output head with width 256 before logits",
+      "env": {
+        "OUTPUT_HEAD_MODE": "bottleneck",
+        "OUTPUT_HEAD_BOTTLENECK": "256"
+      }
+    },
+    {
+      "name": "k4-tied-plus-residual",
+      "exp_id": "AL-20260330-109",
+      "goal": "Blend the efficiency of tied embeddings with a small learned corrective output path.",
+      "hypothesis": "The model may not need a fully untied dense head if a tied base plus a small residual head captures the missing freedom.",
+      "what_it_teaches": "Whether the untied win is mostly about a small correction or about fully separate output weights.",
+      "why_worthy": "This tests a challenge-specific compromise between size and output expressivity.",
+      "description": "use tied logits plus a small residual output head",
+      "env": {
+        "TIE_EMBEDDINGS": "1",
+        "OUTPUT_HEAD_MODE": "tied_residual",
+        "OUTPUT_HEAD_RANK": "64"
+      }
+    },
+    {
+      "name": "k5-two-stage-256",
+      "exp_id": "AL-20260330-110",
+      "goal": "Test the boldest head in the tranche: a learned two-stage output mapper.",
+      "hypothesis": "The output path may want its own hidden transformation before logits, especially in a tiny-model regime where the last projection is a bottleneck.",
+      "what_it_teaches": "Whether richer output computation beats both dense and compressed linear heads.",
+      "why_worthy": "If output path is really first-class, then a more expressive head could be a frontier move rather than a side tweak.",
+      "description": "use a two-stage nonlinear output head with width 256",
+      "env": {
+        "OUTPUT_HEAD_MODE": "two_stage",
+        "OUTPUT_HEAD_BOTTLENECK": "256"
+      }
+    }
+  ]
+}

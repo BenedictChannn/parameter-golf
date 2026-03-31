@@ -163,6 +163,53 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - [`AL-20260329-029`](./experiments.tsv) says slower head-LR is competitive but secondary to output calibration
 - [`AL-20260329-030`](./experiments.tsv) says output-head learning dynamics are also real; a somewhat faster `HEAD_LR=0.012` beat both the default and slower-head-LR versions of the untied + softcap20 frontier
 
+### I-20260330-001 - The Untied Output Frontier Still Has Local Headroom
+
+- Category: output path
+- Hypothesis: the current best line is still slightly mis-set locally, and a tighter neighborhood around `LOGIT_SOFTCAP=20` and `HEAD_LR=0.012` can produce one more immediate frontier step.
+- Why it might work:
+- tranche F ended on an active win rather than a flattening result
+- the best-tested softcap and head-LR settings were only bracketed coarsely, not tightly
+- Status: active
+- Related tranche: [`T-20260330-G`](./tranches.md#t-20260330-g-untied-output-local-calibration)
+- Evidence so far:
+- [`AL-20260330-001`](./experiments.tsv) says there is still tie-scale sensitivity on the stronger-clipping side, but not a clean new win.
+- [`AL-20260330-002`](./experiments.tsv), [`AL-20260330-003`](./experiments.tsv), and [`AL-20260330-004`](./experiments.tsv) say the obvious nearby scalar moves all lose.
+- [`AL-20260330-005`](./experiments.tsv) says even the strongest local combo did not beat the anchor.
+- Status: parked
+
+### I-20260330-002 - Residual Controls And Skip Paths Are The Next Likely Bottleneck
+
+- Category: architecture
+- Hypothesis: after width, steps, attention, and output path are improved, the next meaningful gain may come from simplifying or retuning `resid_mix`, `attn_scale`, `mlp_scale`, or `skip_weights`.
+- Why it might work:
+- the output-path local neighborhood now looks mostly mapped
+- these controls are distinctive to this script and still under-tested
+- `architecture_review.md` already flags them as a plausible overbuilt family
+- Status: active
+- Related tranche: [`T-20260330-H`](./tranches.md#t-20260330-h-residual-control-simplification)
+
+### I-20260330-003 - Not Every Layer Needs Full Attention
+
+- Category: architecture
+- Hypothesis: some layers can switch from full attention to a cheaper state-space-inspired sequence mixer without giving back much quality under the same `600s` budget.
+- Why it might work:
+- tranche H mostly closed the generic residual-simplification path
+- the next serious upside is likely in changing the block, not pruning scalars
+- a hybrid stack may trade some attention expressivity for more efficient sequence processing
+- Status: active
+- Related tranche: [`T-20260330-J`](./tranches.md#t-20260330-j-hybrid-sequence-mixer-audit)
+
+### I-20260330-004 - Full K/V Structure May Be Overbuilt
+
+- Category: architecture
+- Hypothesis: the current attention block may be over-spending parameters and compute on full K/V projections, and a latent-KV bottleneck can preserve most of the useful attention behavior.
+- Why it might work:
+- MLA-style ideas suggest K/V structure can be compressed without collapsing usefulness
+- the parameter golf setting rewards anything that buys more steps or more capacity under the same wall-clock budget
+- Status: active
+- Related tranche: [`T-20260330-I`](./tranches.md#t-20260330-i-latent-kv-attention-audit)
+
 ## Parked
 
 ### I-20260329-006 - KV1 As The Main Frontier Lever
@@ -171,4 +218,145 @@ This is the high-level hypothesis bank. Not every idea should become an experime
 - Hypothesis: reducing `NUM_KV_HEADS` to `1` is a strong frontier move for the current `10`-layer setup.
 - Why parked:
 - [`AL-20260329-005`](./experiments.tsv) suggests `kv1` is not competitive with the best `kv2` depth branches on this stack
+- Status: parked
+
+## Queued Roadmap
+
+These are the next six tranches worth planning after the active latent-KV tranche closes. They are ordered by expected research value, not by ease.
+
+### Q-20260330-001 - Hybrid Sequence Mixer Layers
+
+- Category: architecture
+- Goal: test whether some attention layers can be replaced by a cheaper delta-style or state-space-inspired mixer.
+- Main hypothesis: not every layer needs full attention; a hybrid stack can preserve most of the quality while buying more useful training budget.
+- Why it is worth the compute:
+- it asks a real mechanism question rather than a scalar-tuning one
+- it could open a fundamentally different small-model design if it works
+- Related tranche: successor to [`T-20260330-J`](./tranches.md#t-20260330-j-hybrid-sequence-mixer-audit)
+- Status: queued
+
+### Q-20260330-002 - Output Head Architecture
+
+- Category: output path
+- Goal: redesign the untied output head itself instead of tuning only `HEAD_LR` and `LOGIT_SOFTCAP`.
+- Main hypothesis: the output path is already proven to matter, but the current dense untied head may not be the best architecture for this challenge.
+- Why it is worth the compute:
+- output-path changes already produced some of the largest gains in the whole campaign
+- moving from scalar tuning to architectural changes is the natural next step
+- Example directions:
+- low-rank output head
+- bottleneck output head
+- shared-base plus small residual head
+- Status: queued
+
+### Q-20260330-003 - Local-Global Attention Split
+
+- Category: attention
+- Goal: test whether the model needs full global attention in every layer, or whether some layers can use a cheaper local/sliding-window pattern.
+- Main hypothesis: a local-global split may preserve enough routing power while freeing compute and size budget.
+- Why it is worth the compute:
+- attention geometry already showed strong leverage
+- this is a structural attention question, not a head-count tweak
+- Status: queued
+
+### Q-20260330-004 - Skip/Residual Redesign
+
+- Category: architecture
+- Goal: redesign the skip and residual system rather than merely ablating it.
+- Main hypothesis: the model wants skip topology, but it may not need the current full learned parameterization for skip and residual routing.
+- Why it is worth the compute:
+- tranche H already showed deletion is mostly the wrong question
+- `SKIP_MODE=unit` nearly tied the frontier, so a cheaper or cleaner routing design is still plausible
+- Example directions:
+- shared skip gates instead of per-channel weights
+- fewer but more intentional skip links
+- alternative residual routing layouts
+- Status: queued
+
+### Q-20260330-005 - Mechanism-Specific Learning Rates
+
+- Category: optimizer
+- Goal: stop using only broad parameter-class learning rates and test whether new mechanisms want their own learning dynamics.
+- Main hypothesis: promising architecture ideas may be underperforming because they are being trained at the wrong relative speed, not because the mechanism is bad.
+- Why it is worth the compute:
+- we already split embedding, head, matrix, and scalar LRs successfully
+- the same logic may matter for attention vs MLP, early vs late layers, or new blocks like latent-KV and mixers
+- Note:
+- this is best used as a support tranche for promising architecture families, not as a standalone tuning detour
+- Status: queued
+
+### Q-20260330-006 - Quantization-Aware Warmdown
+
+- Category: optimization + compression
+- Goal: test whether the tail end of training can be shaped to make the final int8+zlib submission behave better after quantization.
+- Main hypothesis: the best fp training schedule is not necessarily the best schedule for the model we actually submit, and a better warmdown could reduce post-quantization damage.
+- Why it is worth the compute:
+- this is challenge-specific rather than generic tuning
+- the score is computed on a compressed model, so end-of-training behavior matters more than usual
+- Example directions:
+- longer or gentler LR decay at the end
+- short stabilization phases before export
+- schedule variants judged by post-quantization score, not only training loss
+- Status: queued
+
+## 2026-03-31 Program Closeout
+
+### Promote
+
+### I-20260331-001 - Hybrid Mixer Refinement Around The Lower-Stack Winner
+
+- Category: architecture
+- Hypothesis: the new best line, [`AL-20260330-104`](./experiments.tsv), still has headroom in mixer placement, width, or kernel shape.
+- Why it might work:
+- tranche J already proved the family is real
+- lower-stack replacement was clearly better than middle-only or upper-only replacement
+- the next good question is refinement, not whether the family exists
+- Status: active
+
+### I-20260331-002 - Cheap Routing Plus Hybrid Mixer
+
+- Category: architecture
+- Hypothesis: the cheap-routing package from [`AL-20260330-120`](./experiments.tsv) may stack with the hybrid-mixer winner rather than competing with it.
+- Why it might work:
+- both families improved the frontier independently
+- one changes the block type while the other changes the routing controls
+- this is a justified combo hypothesis, not random stacking
+- Status: active
+
+### I-20260331-003 - Local-Global Attention Debug And Completion
+
+- Category: attention
+- Hypothesis: the local-global family still deserves a fair test once the lower-stack local-window crash is fixed.
+- Why it might work:
+- the family is unresolved, not disproven
+- the lower-stack motif already looked strong in the hybrid-mixer tranche, so lower-stack locality is still a plausible direction
+- Status: active
+
+## Park After Program
+
+### I-20260331-004 - Output Head Architecture As A Near-Term Frontier
+
+- Category: output path
+- Hypothesis: changing the head architecture itself is the best next use of compute on the current line.
+- Why parked:
+- tranche K mostly killed this on the current backbone
+- the dense untied head stayed clearly better than low-rank and nonlinear alternatives
+- Status: parked
+
+### I-20260331-005 - Quantization-Aware Warmdown As A Near-Term Frontier
+
+- Category: optimization + compression
+- Hypothesis: a colder or more carefully staged training tail is the next frontier move.
+- Why parked:
+- tranche O mostly hurt badly
+- only head-only cooldown stayed near the old frontier, and even that did not beat it
+- Status: parked
+
+### I-20260331-006 - Mechanism-Specific Learning Rates As A Standalone Tranche
+
+- Category: optimizer
+- Hypothesis: LR splits alone are the next major win.
+- Why parked:
+- tranche N produced useful near-ties but not a real breakthrough
+- the better use of this idea is probably as support for future architecture winners
 - Status: parked

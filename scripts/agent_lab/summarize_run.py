@@ -187,10 +187,34 @@ def render_markdown(
         lines.append(f"- artifact size: `{summary.artifact_bytes}` bytes int8+zlib")
     if current_best and summary.primary_val_bpb is not None:
         delta_best = summary.primary_val_bpb - current_best.val_bpb
-        lines.append(f"- delta vs current best `{current_best.exp_id}`: `{delta_best:+.4f}` val_bpb")
+        pct_best = percent_delta(summary.primary_val_bpb, current_best.val_bpb)
+        lines.append(
+            f"- delta vs current best `{current_best.exp_id}`: `{delta_best:+.4f}` val_bpb "
+            f"({describe_delta(pct_best, 'worse', 'better')})"
+        )
     if anchor and summary.primary_val_bpb is not None:
         delta_anchor = summary.primary_val_bpb - anchor.val_bpb
-        lines.append(f"- delta vs anchor `{anchor.exp_id}`: `{delta_anchor:+.4f}` val_bpb")
+        pct_anchor = percent_delta(summary.primary_val_bpb, anchor.val_bpb)
+        lines.append(
+            f"- delta vs anchor `{anchor.exp_id}`: `{delta_anchor:+.4f}` val_bpb "
+            f"({describe_delta(pct_anchor, 'worse', 'better')})"
+        )
+    if anchor and summary.steps is not None:
+        anchor_steps = extract_steps(anchor.notes)
+        if anchor_steps is not None and anchor_steps > 0:
+            pct_steps = percent_delta(summary.steps, anchor_steps)
+            lines.append(
+                f"- steps vs anchor `{anchor.exp_id}`: `{summary.steps - anchor_steps:+d}` "
+                f"({describe_delta(pct_steps, 'fewer', 'more')})"
+            )
+    if anchor and summary.artifact_bytes is not None:
+        anchor_bytes = extract_artifact_bytes(anchor.notes)
+        if anchor_bytes is not None and anchor_bytes > 0:
+            pct_bytes = percent_delta(summary.artifact_bytes, anchor_bytes)
+            lines.append(
+                f"- artifact vs anchor `{anchor.exp_id}`: `{summary.artifact_bytes - anchor_bytes:+,}` bytes "
+                f"({describe_delta(-pct_bytes, 'larger', 'smaller')})"
+            )
     if summary.num_heads is not None and summary.num_kv_heads is not None:
         lines.append(f"- attention geometry: `q{summary.num_heads}/kv{summary.num_kv_heads}`")
     if summary.tie_embeddings is not None:
@@ -205,10 +229,48 @@ def render_tsv_note(summary: RunSummary, anchor: LedgerExperiment | None, curren
     if summary.artifact_bytes is not None:
         parts.append(f"artifact {summary.artifact_bytes / 1_000_000:.2f} MB")
     if summary.primary_val_bpb is not None and current_best is not None:
-        parts.append(f"vs best {current_best.exp_id} {summary.primary_val_bpb - current_best.val_bpb:+.4f}")
+        pct_best = percent_delta(summary.primary_val_bpb, current_best.val_bpb)
+        parts.append(
+            f"vs best {current_best.exp_id} {summary.primary_val_bpb - current_best.val_bpb:+.4f} "
+            f"({describe_delta(pct_best, 'worse', 'better')})"
+        )
     if summary.primary_val_bpb is not None and anchor is not None:
-        parts.append(f"vs anchor {anchor.exp_id} {summary.primary_val_bpb - anchor.val_bpb:+.4f}")
+        pct_anchor = percent_delta(summary.primary_val_bpb, anchor.val_bpb)
+        parts.append(
+            f"vs anchor {anchor.exp_id} {summary.primary_val_bpb - anchor.val_bpb:+.4f} "
+            f"({describe_delta(pct_anchor, 'worse', 'better')})"
+        )
     return "; ".join(parts)
+
+
+def percent_delta(value: float | int | None, baseline: float | int | None) -> float | None:
+    if value is None or baseline in (None, 0):
+        return None
+    return ((float(value) - float(baseline)) / float(baseline)) * 100.0
+
+
+def describe_delta(pct: float | None, positive_label: str, negative_label: str) -> str:
+    if pct is None:
+        return "n/a"
+    if abs(pct) < 0.05:
+        return "flat"
+    label = positive_label if pct > 0 else negative_label
+    return f"{abs(pct):.2f}% {label}"
+
+
+def extract_steps(notes: str) -> int | None:
+    match = re.search(r"(\d+)\s+steps\s+in", notes)
+    return int(match.group(1)) if match else None
+
+
+def extract_artifact_bytes(notes: str) -> int | None:
+    match_mb = re.search(r"artifact\s+(\d+\.\d+)\s+MB", notes)
+    if match_mb:
+        return int(float(match_mb.group(1)) * 1_000_000)
+    match_bytes = re.search(r"artifact\s+(\d+)\s+bytes", notes)
+    if match_bytes:
+        return int(match_bytes.group(1))
+    return None
 
 
 def append_results_row(path: Path, exp_id: str, commit: str, summary: RunSummary, status: str, description: str) -> None:

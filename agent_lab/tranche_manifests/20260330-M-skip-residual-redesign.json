@@ -1,0 +1,92 @@
+{
+  "tranche_id": "T-20260330-M",
+  "title": "Skip and Residual Redesign",
+  "research_question": "If the current residual family is useful but over-parameterized, what cleaner routing design preserves the benefit with less baggage?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260329-030",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "m1-shared-skip-gate",
+      "exp_id": "AL-20260330-116",
+      "goal": "Replace per-channel learned skip weights with one shared scalar gate per skip link.",
+      "hypothesis": "The model may want skip topology and coarse routing strength, but not full per-channel skip parameterization.",
+      "what_it_teaches": "Whether the skip-weight win from tranche H is mostly about having any gate at all.",
+      "why_worthy": "Tranche H already showed learned skip weights are the softest target in this family.",
+      "description": "use shared scalar skip gates instead of full learned skip-weight vectors",
+      "env": {
+        "SKIP_MODE": "shared_scalar"
+      }
+    },
+    {
+      "name": "m2-sparse-skip-pattern",
+      "exp_id": "AL-20260330-117",
+      "goal": "Keep skip topology but reduce the number of skip links.",
+      "hypothesis": "The model may only need a few strategically placed skip paths rather than the full current skip pattern.",
+      "what_it_teaches": "Whether skip density matters as much as skip existence.",
+      "why_worthy": "This tests topology redesign, not just parameterization changes.",
+      "description": "keep only alternating encoder-decoder skip links with shared scalar gates",
+      "env": {
+        "SKIP_MODE": "shared_scalar",
+        "SKIP_LINK_PATTERN": "alternate"
+      }
+    },
+    {
+      "name": "m3-scalar-resid-mix",
+      "exp_id": "AL-20260330-118",
+      "goal": "Replace full per-channel resid_mix with one scalar or one small shared gate.",
+      "hypothesis": "The model may need the residual stream blend concept, but not full per-channel freedom for it.",
+      "what_it_teaches": "Whether `resid_mix` is valuable because of its mechanism or because of its parameter count.",
+      "why_worthy": "Tranche H showed resid_mix matters, so the next worthwhile question is how much structure it really needs.",
+      "description": "replace full per-channel resid_mix with a shared scalar gate",
+      "env": {
+        "RESID_MIX_MODE": "scalar"
+      }
+    },
+    {
+      "name": "m4-shared-resid-scales",
+      "exp_id": "AL-20260330-119",
+      "goal": "Keep residual scaling but share it more aggressively.",
+      "hypothesis": "The model may want residual scaling as a concept while not needing one learned scale per channel.",
+      "what_it_teaches": "Whether residual scales are about coarse branch weighting or fine-grained feature control.",
+      "why_worthy": "This is the clean follow-up to tranche H's 'scales matter' result.",
+      "description": "replace per-channel attn/mlp residual scales with one shared scalar each",
+      "env": {
+        "RESID_SCALE_MODE": "shared_scalar"
+      }
+    },
+    {
+      "name": "m5-cheap-routing-package",
+      "exp_id": "AL-20260330-120",
+      "goal": "Test one coherent cheaper routing system built from the best redesign ideas.",
+      "hypothesis": "A cleaner routing package with shared gates may preserve most of the residual-family benefit while cutting needless flexibility.",
+      "what_it_teaches": "Whether the family wants redesign as a system rather than one knob at a time.",
+      "why_worthy": "This is the only justified combo run because the routing components likely interact strongly.",
+      "description": "combine shared scalar skip gates, scalar resid_mix, and shared residual scales",
+      "env": {
+        "SKIP_MODE": "shared_scalar",
+        "RESID_MIX_MODE": "scalar",
+        "RESID_SCALE_MODE": "shared_scalar"
+      }
+    }
+  ]
+}

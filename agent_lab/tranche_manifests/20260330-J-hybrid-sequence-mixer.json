@@ -1,0 +1,91 @@
+{
+  "tranche_id": "T-20260330-J",
+  "title": "Hybrid Sequence Mixer Audit",
+  "research_question": "Does every layer really need full attention, or can a hybrid stack keep most of the quality while using cheaper sequence mixers in selected layers?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260329-030",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012",
+    "MIXER_DIM": "256",
+    "MIXER_KERNEL": "4"
+  },
+  "candidates": [
+    {
+      "name": "j1-middle3",
+      "exp_id": "AL-20260330-101",
+      "goal": "Test the smallest middle-of-stack swap from attention into a cheaper sequence mixer.",
+      "hypothesis": "The middle of the stack may be the safest place to use a cheaper sequence mixer while preserving input formation and output refinement.",
+      "what_it_teaches": "Whether the hybrid idea is viable at all.",
+      "why_worthy": "This is the lowest-risk true architecture replacement, so it is the right first gate for the whole family.",
+      "description": "replace the middle three attention layers with sequence mixers",
+      "env": {
+        "MIXER_LAYERS": "3,4,5"
+      }
+    },
+    {
+      "name": "j2-middle5",
+      "exp_id": "AL-20260330-102",
+      "goal": "Scale the hybrid idea beyond a minimal swap.",
+      "hypothesis": "If the hybrid idea is real, more of the middle stack may be replaceable than we expect.",
+      "what_it_teaches": "Whether the win, if any, scales beyond a light touch.",
+      "why_worthy": "This separates 'hybrid works a little' from 'hybrid changes the stack budget meaningfully'.",
+      "description": "replace the middle five attention layers with sequence mixers",
+      "env": {
+        "MIXER_LAYERS": "2,3,4,5,6"
+      }
+    },
+    {
+      "name": "j3-alternating",
+      "exp_id": "AL-20260330-103",
+      "goal": "Test whether interleaving attention and mixers is better than block replacement.",
+      "hypothesis": "Alternating global routing and cheaper local mixing may work better than separating them into contiguous regions.",
+      "what_it_teaches": "Whether the architecture wants layer-to-layer cooperation rather than region specialization.",
+      "why_worthy": "This is a distinct structural theory, not just 'more mixer layers'.",
+      "description": "alternate attention and sequence-mixer layers through the stack",
+      "env": {
+        "MIXER_LAYERS": "1,3,5,7"
+      }
+    },
+    {
+      "name": "j4-lower4",
+      "exp_id": "AL-20260330-104",
+      "goal": "Probe whether early layers can be made cheaper while later attention stays full-fidelity.",
+      "hypothesis": "Lower layers may tolerate sequence mixers better than upper layers because later attention carries the final refinement burden.",
+      "what_it_teaches": "Whether lower-layer replacement is the cleaner placement.",
+      "why_worthy": "This directly mirrors the placement logic that mattered in tranche I, but for a completely different mechanism.",
+      "description": "replace the lower four attention layers with sequence mixers",
+      "env": {
+        "MIXER_LAYERS": "0,1,2,3"
+      }
+    },
+    {
+      "name": "j5-upper4",
+      "exp_id": "AL-20260330-105",
+      "goal": "Probe whether later layers are actually the better place to save attention cost.",
+      "hypothesis": "Upper layers may be more replaceable than expected if attention's most critical role is in early representation building.",
+      "what_it_teaches": "Whether upper-layer replacement is the cleaner placement.",
+      "why_worthy": "This closes the placement map and makes the family interpretable even if all five lose.",
+      "description": "replace the upper four attention layers with sequence mixers",
+      "env": {
+        "MIXER_LAYERS": "5,6,7,8"
+      }
+    }
+  ]
+}

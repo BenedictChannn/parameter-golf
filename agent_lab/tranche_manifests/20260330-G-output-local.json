@@ -1,0 +1,76 @@
+{
+  "tranche_id": "T-20260330-G",
+  "title": "Untied Output Local Calibration",
+  "research_question": "Is the current untied output winner still locally mis-set around LOGIT_SOFTCAP=20 and HEAD_LR=0.012?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260329-030",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "TIE_EMBEDDINGS": "0"
+  },
+  "candidates": [
+    {
+      "name": "g1-softcap15",
+      "exp_id": "AL-20260330-001",
+      "hypothesis": "The current winner may still be slightly overconfident, so stronger clipping at LOGIT_SOFTCAP=15 can improve the untied frontier.",
+      "description": "tighten softcap from 20 to 15 on the current untied frontier",
+      "env": {
+        "LOGIT_SOFTCAP": "15",
+        "HEAD_LR": "0.012"
+      }
+    },
+    {
+      "name": "g2-softcap25",
+      "exp_id": "AL-20260330-002",
+      "hypothesis": "The current winner may already be slightly over-clipped, so relaxing to LOGIT_SOFTCAP=25 could recover useful confidence.",
+      "description": "relax softcap from 20 to 25 on the current untied frontier",
+      "env": {
+        "LOGIT_SOFTCAP": "25",
+        "HEAD_LR": "0.012"
+      }
+    },
+    {
+      "name": "g3-headlr0010",
+      "exp_id": "AL-20260330-003",
+      "hypothesis": "The useful head-LR direction may be upward from 0.008, but the true local optimum could still sit slightly below 0.012.",
+      "description": "slow head LR slightly from 0.012 to 0.010 on the current untied frontier",
+      "env": {
+        "LOGIT_SOFTCAP": "20",
+        "HEAD_LR": "0.010"
+      }
+    },
+    {
+      "name": "g4-headlr0016",
+      "exp_id": "AL-20260330-004",
+      "hypothesis": "The untied output head may still be under-updated, so raising HEAD_LR to 0.016 could improve the current frontier further.",
+      "description": "speed head LR from 0.012 to 0.016 on the current untied frontier",
+      "env": {
+        "LOGIT_SOFTCAP": "20",
+        "HEAD_LR": "0.016"
+      }
+    },
+    {
+      "name": "g5-softcap15-headlr0016",
+      "exp_id": "AL-20260330-005",
+      "hypothesis": "If stronger clipping and faster head updates are both the right local directions, the combination may stack into one more immediate frontier gain.",
+      "description": "stack tighter softcap and faster head LR on the current untied frontier",
+      "env": {
+        "LOGIT_SOFTCAP": "15",
+        "HEAD_LR": "0.016"
+      }
+    }
+  ]
+}

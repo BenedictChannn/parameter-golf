@@ -37,11 +37,12 @@ Design is inspired by [karpathy/autoresearch](https://github.com/karpathy/autore
    - [`architecture_review.md`](architecture_review.md) for the component-by-component model audit
    These are the fast-orientation surfaces. Use them to summarize what is true, then link outward to `experiments.tsv` and the dated build log for details.
 
-7. **Tranche execution:** define machine-readable tranche manifests under [`tranche_manifests/`](tranche_manifests/), dry-run them with:
+7. **Optional tranche execution:** define machine-readable tranche manifests under [`tranche_manifests/`](tranche_manifests/), dry-run them with:
    ```bash
    python3 scripts/agent_lab/run_tranche.py agent_lab/tranche_manifests/template.json
    ```
    and execute with `--execute` once the tranche is approved.
+   This is optional support tooling. The default research loop is still chat-led: run, inspect, reflect, decide, repeat.
 
 8. **Visual aid:** regenerate the experiment dashboard after new runs:
    ```bash
@@ -68,7 +69,7 @@ Design is inspired by [karpathy/autoresearch](https://github.com/karpathy/autore
 | [`scripts/agent_lab/plot_experiments.py`](../scripts/agent_lab/plot_experiments.py) | Zero-dependency renderer for the experiment dashboard. |
 | [`scripts/agent_lab/summarize_run.py`](../scripts/agent_lab/summarize_run.py) | Parse a completed run log into reusable markdown / JSON / TSV-note summaries. |
 | [`scripts/agent_lab/analyze_budget.py`](../scripts/agent_lab/analyze_budget.py) | Parameter-budget breakdown for a chosen model shape. |
-| [`scripts/agent_lab/run_tranche.py`](../scripts/agent_lab/run_tranche.py) | Manifest-driven tranche dry-run and sequential execution helper. |
+| [`scripts/agent_lab/run_tranche.py`](../scripts/agent_lab/run_tranche.py) | Optional manifest-driven tranche dry-run and sequential execution helper. |
 | `tranche_manifests/` | Machine-readable execution plans for tranche runners. |
 
 `results.tsv`, `run.log`, and `tranche_runs/` are gitignored runtime artifacts.
