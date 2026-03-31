@@ -785,7 +785,7 @@ These are the next six tranche manifests prepared for the lab. All six are now r
 
 ## T-20260331-P: Hybrid Mixer Refinement
 
-**Status:** queued
+**Status:** completed
 
 **Goal**  
 Refine the current best family, [`AL-20260330-104`](./experiments.tsv), instead of treating the first hybrid-mixer win as fully mapped.
@@ -823,9 +823,30 @@ Is the lower-four-mixer winner best because of the general idea, or is there sti
 - if `P3` wins, the hybrid idea is even more efficient than the current winner suggests
 - if `P4` or `P5` wins, the mixer mechanism itself still has local headroom
 
+**Results**
+
+- [`AL-20260331-001`](./experiments.tsv) (`P1`, lower three mixers) improved the frontier to `1.3453` while staying valid at 15.04 MB.
+- [`AL-20260331-002`](./experiments.tsv) (`P2`, lower five mixers) regressed slightly to `1.3502`, despite better speed and size.
+- [`AL-20260331-003`](./experiments.tsv) (`P3`, lower four with `MIXER_DIM=192`) stayed exactly flat to the old winner at `1.3488` while saving bytes.
+- [`AL-20260331-004`](./experiments.tsv) (`P4`, lower four with `MIXER_DIM=320`) became the new best valid run at `1.3451`.
+- [`AL-20260331-005`](./experiments.tsv) (`P5`, lower four with `MIXER_KERNEL=6`) also improved on the old best to `1.3477`.
+
+**Reading**
+
+- the hybrid family is real and still has headroom
+- lower-stack replacement is robust rather than brittle
+- the best current direction is not “more mixer layers at any cost”; it is a stronger mixer inside the same lower-four placement
+- the lower-five run says the frontier still wants some lower-stack attention
+
+**Outcome**
+
+- best result from this tranche: [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+- main conclusion: the mixer mechanism itself was still underpowered; widening it helped more than changing the lower-stack placement broadly
+- next pivot: test whether the cheap-routing package stacks with the stronger hybrid winner, while keeping AttnRes-lite active as the new bold routing family
+
 ## T-20260331-Q: AttnRes-lite Dynamic Depth Routing
 
-**Status:** queued
+**Status:** active
 
 **Goal**  
 Test whether fixed residual and skip routing should give way to a small, input-dependent depth-routing module over a few earlier layer states.
@@ -841,7 +862,7 @@ If skip topology matters and routing redesign matters, is the next step to let t
 
 **Anchor**
 
-- [`AL-20260330-104`](./experiments.tsv) at `1.3488`
+- [`AL-20260331-004`](./experiments.tsv) is the current best valid frontier
 
 **Planned experiments**
 
@@ -860,9 +881,15 @@ If skip topology matters and routing redesign matters, is the next step to let t
 - if `Q4` stays close, the family may be useful in a cheaper form
 - if only `Q5` wins, dynamic routing likely wants to be part of a package, not a standalone change
 
+**Current status**
+
+- [`AL-20260331-006`](./experiments.tsv) crashed before producing a metric because TorchDynamo rejected a Python `id()` call inside the candidate-routing helper.
+- That compiler issue was fixed, the implementation was simplified, and the tranche was resumed.
+- A clean rerun of `Q1` is still needed because the first attempt did not produce a valid score.
+
 ## T-20260331-R: Architecture-Specific Schedules
 
-**Status:** queued
+**Status:** completed
 
 **Goal**  
 Test whether the strongest new architectures are being judged with the wrong training tail, especially near quantization and export.
@@ -895,3 +922,22 @@ Do the current hybrid winner and similar bold architectures want a different war
 - if `R1` or `R2` wins, the new backbone wants a different global tail
 - if `R3` wins, final stabilization is the real mechanism
 - if `R4` or `R5` wins, the output path remains the main quantization-sensitive surface even on the hybrid winner
+
+**Results**
+
+- [`AL-20260331-011`](./experiments.tsv) (`R1`, mild warmdown) regressed to `1.3591`.
+- [`AL-20260331-012`](./experiments.tsv) (`R2`, longer warmdown) regressed further to `1.3649`.
+- [`AL-20260331-013`](./experiments.tsv) (`R3`, final stabilization only) stayed respectable at `1.3502` but still lost.
+- [`AL-20260331-014`](./experiments.tsv) (`R4`, head-focused cooldown) nearly tied the old hybrid winner at `1.3489`, but did not beat it.
+- [`AL-20260331-015`](./experiments.tsv) (`R5`, mild tail plus head cooldown) still lost at `1.3517`.
+
+**Reading**
+
+- the stronger hybrid backbone still does not want a broad colder tail
+- the only live schedule hint is output-path-sensitive cooldown
+- even that looks like support, not a new frontier lever
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: broad warmdown remains the wrong story even on the improved hybrid backbone, and schedule work should stay secondary to architecture

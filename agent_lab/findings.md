@@ -292,3 +292,54 @@ Use [`state.md`](./state.md) for the live dashboard, [`ideas.md`](./ideas.md) fo
 - [`AL-20260330-129`](./experiments.tsv) was close enough that output-path-specific cooldown might still matter in a different architecture regime.
 - Next falsification:
 - if quantization-aware scheduling is revisited, focus on output-path-sensitive finishing or architecture-specific tails rather than broad colder schedules.
+
+
+## F-20260331-024: The Hybrid Mixer Frontier Still Has Local Headroom
+
+- Claim: the lower-stack hybrid-mixer family was not locally exhausted at [`AL-20260330-104`](./experiments.tsv); refining the mechanism still produced meaningful gains.
+- Confidence: high
+- Evidence:
+- [`AL-20260331-001`](./experiments.tsv) improved the frontier further with lower-three mixers.
+- [`AL-20260331-004`](./experiments.tsv) improved again and became the new best valid run at `1.3451`.
+- [`AL-20260331-005`](./experiments.tsv) also beat the old best via a wider mixer kernel.
+- Counterevidence:
+- [`AL-20260331-002`](./experiments.tsv) shows the win does not simply scale with “more mixer layers.”
+- [`AL-20260331-003`](./experiments.tsv) stayed flat, so not every refinement direction pays.
+- Next falsification:
+- test whether the cheap-routing package stacks with the stronger hybrid winner, or whether both families are buying the same underlying effect.
+
+## F-20260331-025: The Lower Stack Wants Mixers, But Not Too Many
+
+- Claim: the lower stack remains the right place to replace attention, but pushing the replacement from four lower layers to five goes too far on the current frontier.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260331-002`](./experiments.tsv) was smaller and faster than the anchor, but still regressed in quality.
+- [`AL-20260331-001`](./experiments.tsv) and [`AL-20260331-004`](./experiments.tsv) both beat the old best without needing a fifth lower mixer layer.
+- Counterevidence:
+- the quality loss at five mixers was modest, not catastrophic, so the family still tolerates aggressive lower-stack replacement better than many alternatives.
+- Next falsification:
+- test whether five lower mixers only works when paired with a stronger mixer or a complementary routing change.
+
+## F-20260331-026: Broad Warmdown Is Still The Wrong Schedule Story On The Hybrid Winner
+
+- Claim: even on the stronger hybrid-mixer backbone, broad warmdown remains the wrong architecture-specific schedule story.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260331-011`](./experiments.tsv) and [`AL-20260331-012`](./experiments.tsv) both regressed clearly.
+- [`AL-20260331-015`](./experiments.tsv) shows the broader mild-tail combo also failed.
+- Counterevidence:
+- [`AL-20260331-013`](./experiments.tsv) and [`AL-20260331-014`](./experiments.tsv) stayed close enough that some narrow end-of-training interventions may still matter.
+- Next falsification:
+- if schedule work is revisited, focus on output-path-sensitive cooldown or very narrow stabilization rather than global colder tails.
+
+## F-20260331-027: Head-Focused Cooldown Is The Only Live Schedule Hint
+
+- Claim: among the architecture-specific schedule ideas tested so far, only output-path-sensitive cooldown stayed in the noise band of the hybrid frontier.
+- Confidence: medium
+- Evidence:
+- [`AL-20260331-014`](./experiments.tsv) finished at `1.3489`, effectively tying the older hybrid winner.
+- It beat the broader warmdown and combined-tail variants cleanly.
+- Counterevidence:
+- it still did not beat the actual hybrid frontier, so this is a hint rather than a win.
+- Next falsification:
+- if schedule work is resumed later, apply head-focused cooldown on top of the stronger `AL-20260331-004` backbone or after another architecture change.

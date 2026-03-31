@@ -270,7 +270,11 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - it follows the strongest frontier signal we currently have
 - it can reveal whether the mixer win is robust or narrowly tuned
 - Related tranche: `T-20260331-P`
-- Status: queued
+- Status: completed
+- Evidence so far:
+- [`AL-20260331-001`](./experiments.tsv) showed the hybrid family is robust: lower-three mixers still beat the old best.
+- [`AL-20260331-004`](./experiments.tsv) became the new best valid run, which means the mixer mechanism itself still had local headroom.
+- [`AL-20260331-002`](./experiments.tsv) showed that pushing to five lower mixers goes too far on the current frontier.
 
 ### Q-20260331-002 - AttnRes-lite Dynamic Depth Routing
 
@@ -281,7 +285,10 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - it directly builds on the routing lessons from tranches `H` and `M`
 - it tests a new principle instead of a local scalar adjustment
 - Related tranche: `T-20260331-Q`
-- Status: queued
+- Status: active
+- Evidence so far:
+- [`AL-20260331-006`](./experiments.tsv) crashed before producing a metric because a TorchDynamo-incompatible Python `id()` call slipped into the first implementation.
+- That implementation bug is now fixed and the tranche is running again, so the family is still scientifically alive.
 
 ### Q-20260331-003 - Architecture-Specific Schedules
 
@@ -292,7 +299,10 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - it targets compressed-model behavior directly
 - it can rescue promising architecture changes that fail under a mismatched schedule
 - Related tranche: `T-20260331-R`
-- Status: queued
+- Status: completed
+- Evidence so far:
+- [`AL-20260331-011`](./experiments.tsv) and [`AL-20260331-012`](./experiments.tsv) show broad warmdown still hurts on the hybrid winner.
+- [`AL-20260331-014`](./experiments.tsv) says head-focused cooldown is the only schedule hint that stayed near the frontier, but it still did not win.
 
 ## Backlog
 
@@ -417,3 +427,16 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - tranche N produced useful near-ties but not a real breakthrough
 - the better use of this idea is probably as support for future architecture winners
 - Status: parked
+
+
+### I-20260331-007 - Architecture-Specific Schedules On The Hybrid Winner
+
+- Category: optimization
+- Hypothesis: the stronger hybrid-mixer backbone may want a different training tail, especially near export.
+- Why it might work:
+- the earlier quantization-aware schedule tranche was run on an older backbone
+- the new backbone could in principle have different fragility near export
+- Status: parked
+- Evidence so far:
+- [`AL-20260331-011`](./experiments.tsv) and [`AL-20260331-012`](./experiments.tsv) show broad warmdown still hurts.
+- [`AL-20260331-014`](./experiments.tsv) says head-focused cooldown is the only schedule hint that stayed near the frontier, but it still did not win.

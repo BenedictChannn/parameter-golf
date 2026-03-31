@@ -1016,17 +1016,8 @@ class GPT(nn.Module):
                 candidates.append(matched_skip)
             if encoder_outputs:
                 candidates.append(encoder_outputs[0])
-            if x0 is not current_x:
-                candidates.append(x0)
-            deduped: list[Tensor] = []
-            seen: set[int] = set()
-            for cand in candidates:
-                ident = id(cand)
-                if ident in seen:
-                    continue
-                seen.add(ident)
-                deduped.append(cand)
-            return deduped
+            candidates.append(x0)
+            return candidates
 
         # First half stores skips; second half reuses them in reverse order.
         for i in range(self.num_encoder_layers):
