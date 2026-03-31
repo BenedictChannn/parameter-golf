@@ -65,4 +65,4 @@ This is the first-read dashboard for the current research state. Use this for th
 - Experiment ledger: [`experiments.tsv`](./experiments.tsv)
 - Runtime ledger: [`results.tsv`](./results.tsv)
 - Experiment dashboard: [`plots/experiments.html`](./plots/experiments.html)
-- Latest narrative log: [`2026-03-31-agent-lab.md`](../docs/build-logs/2026-03-31-agent-lab.md)
+- Latest narrative log: [`2026-03-30-agent-lab.md`](../docs/build-logs/2026-03-30-agent-lab.md)
