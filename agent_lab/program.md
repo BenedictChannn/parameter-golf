@@ -6,11 +6,12 @@ Do not change tokenizer/byte accounting, validation split, or `eval_val` semanti
 
 1. Propose run tag (e.g. date `mar28`). Branch `agent_lab/<tag>` must not exist.
 2. `git checkout -b agent_lab/<tag>` from `main` (or branch the human names).
-3. Read: repo [`README.md`](../README.md), this folder [`README.md`](README.md), **`agent_lab/train_gpt.py`** (only file you edit).
+3. Read: repo [`README.md`](../README.md), this folder [`README.md`](README.md), **`agent_lab/train_gpt.py`** (only code file you edit when a code change is required).
 4. Ensure `DATA_PATH` shards and `TOKENIZER_PATH` exist; else tell human to run `python3 data/cached_challenge_fineweb.py` per main README.
 5. Create **`agent_lab/results.tsv`** with header only (see Logging).
 6. Read **`agent_lab/experiments.tsv`** (what’s already been tried; stable IDs **`AL-YYYYMMDD-NNN`**).
-7. After human confirms, start the loop.
+7. Read **`agent_lab/state.md`**, **`agent_lab/findings.md`**, **`agent_lab/tranches.md`**, and **`agent_lab/ideas.md`** so the next run sits inside an explicit research program rather than only local intuition.
+8. After human confirms, start the loop.
 
 ## Experimentation
 
@@ -21,9 +22,19 @@ RUN_ID=... DATA_PATH=./data/datasets/fineweb10B_sp1024/ TOKENIZER_PATH=./data/to
   torchrun --standalone --nproc_per_node=1 agent_lab/train_gpt.py
 ```
 
-`MAX_WALLCLOCK_SECONDS`: default **600** (`Hyperparameters`). Human may set shorter (e.g. `300`) or `0` for no cap.
+`MAX_WALLCLOCK_SECONDS`: default **600** (`Hyperparameters`). For record-track-comparable experiments, use the full **600s** training budget and do not exceed it. Shorter runs are fine for smoke tests or explicit proxy experiments, but do not compare them directly against the 600s line unless documented as a proxy.
 
-**CAN:** edit **`agent_lab/train_gpt.py`** only.
+**Prefer env vars first** for pure hyperparameter, schedule, and runtime sweeps. The script already exposes the main knobs under `Hyperparameters`, and env-driven runs keep the baseline branch cleaner.
+
+When a tranche is already defined cleanly, prefer a manifest plus:
+
+```bash
+python3 scripts/agent_lab/run_tranche.py agent_lab/tranche_manifests/<manifest>.json
+```
+
+Dry-run first. Use `--execute` only when the tranche is approved and ready to burn compute.
+
+**CAN:** set env vars freely for experiments; edit **`agent_lab/train_gpt.py`** only when the hypothesis requires a real code-path change.
 
 **CANNOT:** edit root **`train_gpt.py`**; add deps without human approval; leak val / break challenge rules; break **`val_bpb`** definition (leave `eval_val`, byte LUTs, val loader alone unless instructed).
 
@@ -48,6 +59,17 @@ Do not mix metrics across experiments.
 
 **First run:** baseline = unmodified `agent_lab/train_gpt.py` (env vars for hardware OK).
 
+## Research posture
+
+- Work on a tree, not only a ladder. Each tranche should ask a real question and branch the search space in a way that teaches something.
+- Start with a short calibration tranche of baseline and mostly one-factor experiments so the stack, timing, and major levers become legible.
+- After that, use judgment. Do not force pure one-factor hill-climbing when interaction effects are likely to matter.
+- Run multi-thesis branches, combo experiments, and small combinatorial sweeps when they are the best way to test a mechanism rather than only a single knob.
+- Fail fast, learn fast, pivot fast. Negative results are valuable if they sharpen the next branch.
+- Ask why a result happened, not only whether it won.
+- Periodically look outside the repo for inspiration, including papers and adjacent ideas, when a branch stalls or when you need new mechanisms to test.
+- Be willing to try original ideas, including optimizer, architecture, evaluation, or compression changes that are not yet established, as long as they stay within challenge rules.
+
 ## Scoring lines
 
 Use your chosen `final_*` line. Memory: `peak memory allocated: <N> MiB` → GB ≈ `N / 1024`.
@@ -71,6 +93,16 @@ Do not commit `results.tsv`.
 
 **Also append [`agent_lab/experiments.tsv`](experiments.tsv)** (tracked): one row per experiment with `exp_id`, parent commit, hypothesis, **verdict** (`correct` / `wrong` / `partial` / `n_a`), metric, `val_bpb`, notes.
 
+**Also maintain the prose memory surfaces**:
+
+- [`agent_lab/state.md`](state.md): high-level dashboard, current best, working beliefs, and next runs
+- [`agent_lab/findings.md`](findings.md): durable conclusions with evidence and falsification paths
+- [`agent_lab/tranches.md`](tranches.md): tranche goals, controls, branch structure, and conclusions
+- [`agent_lab/ideas.md`](ideas.md): candidate and active hypotheses, with links back to experiments and logs
+- [`agent_lab/budget_report.md`](budget_report.md): current component-budget snapshot
+
+Treat these as the lab's short command surfaces. A later session should be able to read `state.md` and `findings.md`, understand the active tranche, and drill down into the exact evidence without reconstructing the whole story from scratch.
+
 **Commits:** use **Conventional Commits** with scope `agent-lab` and a **rich body** (`Exp:`, `Parent:`, `Hypothesis:`, `Result:`). See [`.cursor/skills/agent-lab/SKILL.md`](../.cursor/skills/agent-lab/SKILL.md) (**Commit conventions** + official time limits).
 
 **Human journal / pedagogy:** update **`docs/build-logs/<date>-agent-lab.md`** with thoughts, what changed in code, and lessons — not only numbers.
@@ -80,13 +112,17 @@ Do not commit `results.tsv`.
 Branch: `agent_lab/<tag>` or `agent_lab/<tag>-gpu0`.
 
 1. Note branch/commit.
-2. Change **`agent_lab/train_gpt.py`** (one idea).
-3. `git add agent_lab/train_gpt.py && git commit` — subject **`feat(agent-lab): …`** (see [agent-lab SKILL](../.cursor/skills/agent-lab/SKILL.md))
+2. For pure hyperparameter or schedule ideas, keep **`agent_lab/train_gpt.py`** unchanged and launch with env vars. Edit the file only for structural or mechanistic hypotheses.
+3. If code changed, `git add agent_lab/train_gpt.py && git commit` — subject **`feat(agent-lab): …`** (see [agent-lab SKILL](../.cursor/skills/agent-lab/SKILL.md)). If the experiment is env-only, commit the research-state/logging update after the result instead of forcing a code diff.
 4. `torchrun ... agent_lab/train_gpt.py > agent_lab/run.log 2>&1` (no `tee`; full redirect).
 5. `grep '^final_int8_ttt_lora\|^peak memory allocated' agent_lab/run.log` (adjust grep if you chose the zlib metric).
 6. Empty primary line → likely crash → `tail -n 80 agent_lab/run.log`; fix trivial errors or log `crash` and revert.
 7. Append TSV row.
-8. Better `val_bpb` → keep commit. Else → `git reset --hard` to last good commit.
+8. Parse the finished log with `python3 scripts/agent_lab/summarize_run.py ...` and reuse its output instead of hand-copying metrics.
+9. Update `state.md`, `findings.md`, `tranches.md`, and `ideas.md` so the high-level research view stays synchronized with the exact run ledger.
+10. Regenerate the visual dashboard with `python3 scripts/agent_lab/plot_experiments.py` when the ledger changes.
+11. Refresh `budget_report.md` with `python3 scripts/agent_lab/analyze_budget.py ...` when a new frontier shape materially changes component costs.
+12. Better `val_bpb` or a clearly informative result → keep the branch history and log the lesson. Revert only when the change does not deserve to stay as part of the tree.
 
 **Timeout:** if wall time ≫ **2×** `MAX_WALLCLOCK_SECONDS` + eval slack (e.g. >25 min at 600s cap), kill → discard, revert.
 

@@ -10,34 +10,62 @@ description: Parameter Golf agent-lab — researcher mindset, experiments regist
 Work like a scientist, not only a tuner.
 
 - **Loop:** question → **hypothesis** → implement → run → **measure** → reflect → new question. Write the hypothesis in `experiments.tsv` and the commit body before you romanticize the result.
+- **Memory:** keep a short command surface and a deep evidence trail. `state.md`, `findings.md`, `tranches.md`, and `ideas.md` should tell you the current story in minutes; `experiments.tsv` and the dated build logs should let you prove it.
 - **Scope:** early runs can be **hyperparameters / schedule / batching** to learn the stack. Then deliberately move to **architecture and training mechanics**: attention patterns, block design, MLP/activations, **why this optimizer**, alternatives from papers or your own guesses, **quantization / QAT / low-precision** paths — always within challenge rules and honest **`val_bpb`**.
-- **Breadth + depth:** don’t only stack wins on one path. From a **shared parent** commit, try **sibling** one-factor experiments (breadth). Go deeper on promising lines. Add **combo** runs when you suspect **interaction** (two ideas that only work together).
+- **Breadth + depth:** work on a **tree**, not only a hill-climb. Start with some clean one-factor branches so attribution is legible, then become more ambitious: sibling branches, combo runs, and small combinatorial sweeps when interaction effects are the real question.
+- **Boldness:** be willing to try original ideas, not only known recipes. A failed branch that teaches you something real is still progress.
 - **Evidence:** negative results belong in the log. Confusion is data.
 
 ## Before changing code
 
 1. Read **`agent_lab/program.md`** (hard constraints).
-2. Read **`agent_lab/experiments.tsv`** — what was tried, verdicts, best commit so far.
-3. Read **`.cursor/rules/parameter-golf.mdc`** (challenge guardrails).
+2. Read **`agent_lab/state.md`**, **`agent_lab/findings.md`**, **`agent_lab/tranches.md`**, and **`agent_lab/ideas.md`** when they exist.
+3. Read **`agent_lab/architecture_review.md`** when the next tranche is architecture-facing.
+4. Read **`agent_lab/experiments.tsv`** — what was tried, verdicts, best commit so far.
+5. Read **`.cursor/rules/parameter-golf.mdc`** (challenge guardrails).
+6. Decide whether the hypothesis is env-only or requires a real code change. Prefer env vars for pure hparam, schedule, and runtime sweeps.
 
 ## After each full training run
 
 1. Append **`agent_lab/results.tsv`** (gitignored loop log) if you use it — columns per `program.md`.
 2. Append **`agent_lab/experiments.tsv`** (tracked) with stable **`AL-YYYYMMDD-NNN`** id, parent commit, hypothesis, **verdict** (`correct` / `wrong` / `partial` / `n_a`), metric, `val_bpb`, notes.
-3. Commit with **`feat(agent-lab):`** or **`docs(agent-lab):`** and **rich body** (see **Commit conventions** below).
-4. Update **`docs/build-logs/<date>-agent-lab.md`** — journal entry in a **human voice** (see **Build log voice** below).
+3. Generate a structured run summary with `python3 scripts/agent_lab/summarize_run.py ...` and reuse it in the build log or `results.tsv` note.
+4. Update **`agent_lab/state.md`**, **`agent_lab/findings.md`**, **`agent_lab/tranches.md`**, and **`agent_lab/ideas.md`** so the high-level research memory stays current.
+5. Regenerate **`agent_lab/plots/experiments.svg`** and **`agent_lab/plots/experiments.html`** with `python3 scripts/agent_lab/plot_experiments.py`.
+6. Refresh **`agent_lab/budget_report.md`** with `python3 scripts/agent_lab/analyze_budget.py ...` when the frontier shape changes materially.
+7. Commit with **`feat(agent-lab):`** or **`docs(agent-lab):`** and **rich body** (see **Commit conventions** below).
+8. Update **`docs/build-logs/<date>-agent-lab.md`** — journal entry in a **human voice** (see **Build log voice** below).
+
+## Dashboard plus drill-down
+
+- **`state.md`** is the first-read dashboard: current best, active tranche, working beliefs, next runs.
+- **`findings.md`** is the durable conclusion log: what the lab currently believes, why, and how to falsify it.
+- **`tranches.md`** is the tranche map: why this family of runs exists, what is fixed, and when to pivot.
+- **`ideas.md`** is the hypothesis bank: what is active, parked, or waiting for evidence.
+- **`budget_report.md`** is the component budget snapshot: where params and rough bytes are currently being spent.
+- **`architecture_review.md`** is the component audit: embeddings, attention, MLP, skips, optimizer partition, compression, and TTT.
+- **`experiments.tsv`** is the exact ledger.
+- **`agent_lab/plots/experiments.*`** is the fast visual summary.
+- **`docs/build-logs/*`** is the long-form reasoning trail.
+
+When a tranche is already defined cleanly, prefer using a manifest under `agent_lab/tranche_manifests/` plus `python3 scripts/agent_lab/run_tranche.py ...` so execution is reproducible and resumable.
+
+Keep the short surfaces concise and linked. Do not force a later session to reconstruct the lab state from one giant prose log.
 
 ## One-at-a-time vs interaction effects (important)
 
-**Default loop:** change **one** thing between commits when you can — attribution is clean and matches a disciplined ablation.
+**Default early loop:** change **one** thing between commits when that is the cleanest way to understand the stack or isolate a mechanism.
 
 **Reality:** some ideas only work **together** (e.g. smaller batch + higher LR). Pure hill-climbing can **discard** a change that looks neutral alone but is needed for a later combo.
 
 **Practices:**
 
+- Treat one-factor vs multi-factor as a **judgment call**, not a religion.
+- Use initial tranches to calibrate the landscape; then shift toward **multi-thesis** and **interaction-seeking** experiments when the repo has enough baseline knowledge.
 - Keep the **spine** of verified wins; occasionally spawn a **combo** experiment (`Exp: …-combo`) that stacks 2–3 pending ideas and compare to the best single-change line.
 - If a single change **hurts** or is flat, note **`wrong` or `partial`** but add a **follow-up** row if you suspect **interaction** — don’t treat “no immediate gain” as permanently dead without a designed retest.
 - Log **interaction hypotheses** explicitly in `experiments.tsv` notes and the build log so future you (or an agent) can see what was never tried together.
+- If a branch stalls, look outward for inspiration: papers, adjacent projects, and your own novel mechanism ideas are all fair game.
 
 ## Stable experiment IDs
 
@@ -66,6 +94,8 @@ From the project README FAQ:
 
 - **Training:** **≤ ~10 minutes on 8× H100 (SXM)** for record submissions.
 - **Evaluation:** **≤ ~10 minutes on 8× H100** as well — **in addition to** training, not one combined 10-minute window.
+
+For apples-to-apples research in this repo, prefer using the full **600s** training budget unless the run is explicitly marked as a shorter proxy or smoke test.
 
 **Local dev** (e.g. 1× 3090, long TTT wall time) is **not** proof you meet the official eval cap. Before claiming a record, run the **full** train + eval pipeline on **8× H100** (or the official harness) and confirm **both** phases fit.
 
