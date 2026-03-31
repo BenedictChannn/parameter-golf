@@ -1,0 +1,103 @@
+{
+  "tranche_id": "T-20260331-V",
+  "title": "Top-Only Dynamic Depth Routing Revisit",
+  "research_question": "If dynamic depth routing is useful at all on the current frontier, does it only belong at the very top of the stack in a much lighter form?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-004",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "v1-top1-two-sources-token",
+      "exp_id": "AL-20260331-031",
+      "goal": "Test the lightest plausible dynamic depth selector.",
+      "hypothesis": "Only the very last layer may benefit from choosing between the current stream and one earlier source.",
+      "what_it_teaches": "Whether top-only routing survives when confined to the smallest viable scope.",
+      "why_worthy": "This is the cleanest way to salvage the faint Q3 signal without repeating the broad late-layer failure.",
+      "description": "apply AttnRes-lite only to the last layer with two source states",
+      "env": {
+        "ATTNRES_LAYERS": "8",
+        "ATTNRES_NUM_SOURCES": "2",
+        "ATTNRES_ROUTING_MODE": "token_softmax"
+      }
+    },
+    {
+      "name": "v2-top2-two-sources-token",
+      "exp_id": "AL-20260331-032",
+      "goal": "Test whether the clean Q3 signal wants two top layers but still fewer source choices.",
+      "hypothesis": "The earlier Q3 near-miss may have been harmed by giving the router too many source options.",
+      "what_it_teaches": "Whether fewer choices make top-only routing safer.",
+      "why_worthy": "This directly turns the Q3 result into a sharper second-generation test.",
+      "description": "apply AttnRes-lite to the top two layers with two source states",
+      "env": {
+        "ATTNRES_LAYERS": "7,8",
+        "ATTNRES_NUM_SOURCES": "2",
+        "ATTNRES_ROUTING_MODE": "token_softmax"
+      }
+    },
+    {
+      "name": "v3-top2-shared-routing",
+      "exp_id": "AL-20260331-033",
+      "goal": "Test whether a cheaper top-only router is enough.",
+      "hypothesis": "Top-only routing may work with shared sequence-level routing even though shared routing failed when applied broadly.",
+      "what_it_teaches": "Whether top-only routing wants coarse control rather than token-wise flexibility.",
+      "why_worthy": "This isolates the difference between broad shared routing failure and a narrower top-only use case.",
+      "description": "apply shared-scalar AttnRes-lite only to the top two layers",
+      "env": {
+        "ATTNRES_LAYERS": "7,8",
+        "ATTNRES_NUM_SOURCES": "3",
+        "ATTNRES_ROUTING_MODE": "shared_scalar"
+      }
+    },
+    {
+      "name": "v4-top1-three-sources-token",
+      "exp_id": "AL-20260331-034",
+      "goal": "Let the last layer use a slightly richer depth choice without broadening placement.",
+      "hypothesis": "The final layer may be the one place where a richer multi-source selector is useful.",
+      "what_it_teaches": "Whether the main issue was placement rather than source richness.",
+      "why_worthy": "This cleanly separates “too many layers” from “too many source states.”",
+      "description": "apply three-source token-wise AttnRes-lite only to the final layer",
+      "env": {
+        "ATTNRES_LAYERS": "8",
+        "ATTNRES_NUM_SOURCES": "3",
+        "ATTNRES_ROUTING_MODE": "token_softmax"
+      }
+    },
+    {
+      "name": "v5-top2-routing-plus-cheap-skips",
+      "exp_id": "AL-20260331-035",
+      "goal": "Test the only routing combo that still looks scientifically justified after tranche Q.",
+      "hypothesis": "Top-only dynamic routing may stack with shared skip gates even though broad AttnRes-lite did not stack with the full routing package.",
+      "what_it_teaches": "Whether there is still a narrow path for routing-family interaction to matter.",
+      "why_worthy": "This is the only justified combo revisit because it uses the one AttnRes-lite placement that did not collapse.",
+      "description": "apply top-two-layer AttnRes-lite together with shared scalar skip gates",
+      "env": {
+        "ATTNRES_LAYERS": "7,8",
+        "ATTNRES_NUM_SOURCES": "2",
+        "ATTNRES_ROUTING_MODE": "token_softmax",
+        "SKIP_MODE": "shared_scalar"
+      }
+    }
+  ]
+}
