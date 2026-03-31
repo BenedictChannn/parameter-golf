@@ -319,6 +319,7 @@ Is the current `9L / MLP2 / 98304 / q8-kv2 / QK_GAIN_INIT=1.5` setup the right a
 
 **Why this tranche exists**
 
+
 - tranche C already solved the main width-vs-size allocation question
 - tranche D already solved the immediate optimization question
 - the next compute-worthy pivot should target a different component family
@@ -781,3 +782,116 @@ These are the next six tranche manifests prepared for the lab. All six are now r
 - Why it is worthy:
 - the submitted model is compressed, not the raw fp model
 - challenge-specific end-of-training behavior may matter more than generic schedule quality
+
+## T-20260331-P: Hybrid Mixer Refinement
+
+**Status:** queued
+
+**Goal**  
+Refine the current best family, [`AL-20260330-104`](./experiments.tsv), instead of treating the first hybrid-mixer win as fully mapped.
+
+**Main question**  
+Is the lower-four-mixer winner best because of the general idea, or is there still clear headroom in the exact mixer placement, width, and kernel?
+
+**Fixed controls**
+
+- start from the current best valid frontier shape
+- `9` layers, `MODEL_DIM=512`, `MLP_MULT=2`
+- `TRAIN_BATCH_TOKENS=98304`
+- `NUM_HEADS=4`, `NUM_KV_HEADS=2`
+- untied dense output path, `LOGIT_SOFTCAP=20`, `HEAD_LR=0.012`
+- primary metric `final_int8_ttt_lora`
+
+**Anchor**
+
+- [`AL-20260330-104`](./experiments.tsv) at `1.3488`
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | Why worthy |
+|---|---|---|---|---|
+| `P1` | lower `3` mixer layers | Test whether the current winner is over-replacing attention | Three lower mixers may preserve most of the gain while recovering some lost expressivity | This tells us whether the win is broad or very placement-specific |
+| `P2` | lower `5` mixer layers | Test whether the frontier still wants even less lower-stack attention | The lower stack may tolerate one more mixer layer than the current winner uses | This is the cleanest way to test whether the winner is still too conservative |
+| `P3` | lower `4` mixers, `MIXER_DIM=192` | Test whether the current mixer itself is overbuilt | A smaller mixer may preserve quality while saving bytes and compute | This asks whether the new mechanism is bigger than it needs to be |
+| `P4` | lower `4` mixers, `MIXER_DIM=320` | Test whether the current mixer is underpowered | A richer mixer may exploit the lower-stack replacement idea better than the current width | This checks whether the current winner is capacity-limited inside the mixer |
+| `P5` | lower `4` mixers, `MIXER_KERNEL=6` | Test whether the lower-stack mixer wants a wider local receptive field | The current kernel may be too narrow, and a slightly wider local window may improve the sequence-mixing trade | This probes mechanism quality, not just placement |
+
+**Decision rule**
+
+- if `P1` wins, the current lower-four placement is likely too aggressive
+- if `P2` wins, the frontier wants even less attention in the lower stack
+- if `P3` wins, the hybrid idea is even more efficient than the current winner suggests
+- if `P4` or `P5` wins, the mixer mechanism itself still has local headroom
+
+## T-20260331-Q: AttnRes-lite Dynamic Depth Routing
+
+**Status:** planned, not yet runnable
+
+**Goal**  
+Test whether fixed residual and skip routing should give way to a small, input-dependent depth-routing module over a few earlier layer states.
+
+**Main question**  
+If skip topology matters and routing redesign matters, is the next step to let the model choose which earlier depth representations matter for the current token?
+
+**Fixed controls**
+
+- use the current best hybrid-mixer frontier as the anchor family
+- keep the lower-stack mixer winner fixed unless the candidate explicitly tests a justified combo
+- primary metric `final_int8_ttt_lora`
+
+**Anchor**
+
+- [`AL-20260330-104`](./experiments.tsv) at `1.3488`
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | Why worthy |
+|---|---|---|---|---|
+| `Q1` | late-layer AttnRes-lite, 3 sources | Test the cheapest viable depth-routing version | Even a tiny dynamic selector can beat fixed skip routing | Lowest-risk test of the whole family |
+| `Q2` | late-layer AttnRes-lite, 4 sources | Add one more depth option | One extra earlier-layer candidate may be enough to improve routing quality materially | Tests whether the family is source-limited |
+| `Q3` | top-2-layer AttnRes-lite | Ask whether only the final refinement layers need dynamic depth routing | The benefit may come mostly at the very top of the stack | Cheap way to isolate where dynamic routing matters most |
+| `Q4` | late-layer AttnRes-lite with shared routing | Use cheaper shared gating instead of richer per-token freedom | Coarse dynamic routing may be enough, and cheaper than a richer selector | Distinguishes mechanism value from implementation heaviness |
+| `Q5` | AttnRes-lite + cheap routing combo | Test whether dynamic routing stacks with the best fixed-routing redesign | Cheap fixed routing and dynamic depth routing may be complementary rather than redundant | This is the only justified combo run because routing components likely interact |
+
+**Decision rule**
+
+- if `Q1` or `Q2` wins, dynamic depth routing is immediately a live frontier family
+- if only `Q3` wins, the mechanism should stay confined to the top of the stack
+- if `Q4` stays close, the family may be useful in a cheaper form
+- if only `Q5` wins, dynamic routing likely wants to be part of a package, not a standalone change
+
+## T-20260331-R: Architecture-Specific Schedules
+
+**Status:** queued
+
+**Goal**  
+Test whether the strongest new architectures are being judged with the wrong training tail, especially near quantization and export.
+
+**Main question**  
+Do the current hybrid winner and similar bold architectures want a different warmdown, stabilization, or final head/backbone cooldown than the old baseline schedule?
+
+**Fixed controls**
+
+- start from the current best hybrid-mixer winner
+- keep architecture fixed unless the candidate explicitly tests a schedule interaction
+- primary metric `final_int8_ttt_lora`
+
+**Anchor**
+
+- [`AL-20260330-104`](./experiments.tsv) at `1.3488`
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | Why worthy |
+|---|---|---|---|---|
+| `R1` | short mild warmdown | Test whether the hybrid winner wants a slightly gentler tail | A small warmdown may improve the compressed model without freezing learning too early | This is the cleanest first schedule probe on the new winner |
+| `R2` | longer warmdown | Test whether the winning architecture wants a much calmer finish | The hybrid backbone may be more quantization-sensitive than the old baseline | This brackets the warmdown question instead of guessing one level |
+| `R3` | final stabilization only | Test whether a brief export-focused cooldown helps more than a broad warmdown | The right intervention may be a short final settling phase, not a long decay | This isolates stabilization from full warmdown |
+| `R4` | head-focused final cooldown | Test whether the output path remains the fragile part even on the new hybrid frontier | The compressed model may benefit if the head cools differently from the backbone | This directly follows the near-tie behavior from the earlier quantization tranche |
+| `R5` | mild warmdown + head-focused cooldown | Test the strongest justified schedule combo | A small architecture-aware tail may need both a gentle global decay and extra head control | This is the one schedule combo worth paying for after the single-factor bracket |
+
+**Decision rule**
+
+- if `R1` or `R2` wins, the new backbone wants a different global tail
+- if `R3` wins, final stabilization is the real mechanism
+- if `R4` or `R5` wins, the output path remains the main quantization-sensitive surface even on the hybrid winner

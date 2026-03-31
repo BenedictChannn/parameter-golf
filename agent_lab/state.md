@@ -48,14 +48,16 @@ This is the first-read dashboard for the current research state. Use this for th
 
 - Does the hybrid mixer frontier still have headroom if we retune mixer width, kernel, or placement around the lower-stack design?
 - Can the cheap-routing package stack with the hybrid mixer winner, or are they redundant?
+- Would AttnRes-lite dynamic depth routing beat fixed skip routing if we let later layers choose among a few earlier states?
 - What exactly is crashing in the local-attention path, and is that family still worth finishing once debugged?
-- Is the next best bold family a second-generation mixer tranche, a mixer-plus-routing combo tranche, or a debug-first local-global tranche?
+- Do the strongest new architectures want a different training tail, especially near quantization and export?
 
 ## Next Planned Runs
 
-- next tranche candidate: second-generation hybrid mixer refinement around [`AL-20260330-104`](./experiments.tsv)
-- next tranche candidate: combo tranche pairing cheap routing with the hybrid-mixer winner
-- next tranche candidate: local-global attention debug and completion tranche
+- next tranche: `T-20260331-P` hybrid mixer refinement around [`AL-20260330-104`](./experiments.tsv)
+- next tranche: `T-20260331-Q` AttnRes-lite dynamic depth routing (planned, needs code support)
+- next tranche: `T-20260331-R` architecture-specific schedules on the hybrid mixer winner
+- later backlog: two dedicated MLP exploration tranches, broad-family first and polynomial second
 
 ## Go Deeper
 

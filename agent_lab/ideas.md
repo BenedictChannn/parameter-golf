@@ -259,6 +259,63 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - this is a structural attention question, not a head-count tweak
 - Status: queued
 
+## Near-Term Queue
+
+### Q-20260331-001 - Hybrid Mixer Refinement
+
+- Category: architecture
+- Goal: refine the current best family instead of abandoning it after the first win.
+- Main hypothesis: the lower-stack mixer win is real, but the exact placement, mixer width, and kernel are still probably suboptimal.
+- Why it is worth the compute:
+- it follows the strongest frontier signal we currently have
+- it can reveal whether the mixer win is robust or narrowly tuned
+- Related tranche: `T-20260331-P`
+- Status: queued
+
+### Q-20260331-002 - AttnRes-lite Dynamic Depth Routing
+
+- Category: architecture
+- Goal: test whether fixed residual and skip routing should give way to input-dependent routing over a small set of earlier layer states.
+- Main hypothesis: skip topology matters, routing redesign matters, and the next bold step is dynamic depth selection rather than another fixed routing tweak.
+- Why it is worth the compute:
+- it directly builds on the routing lessons from tranches `H` and `M`
+- it tests a new principle instead of a local scalar adjustment
+- Related tranche: `T-20260331-Q`
+- Status: queued
+
+### Q-20260331-003 - Architecture-Specific Schedules
+
+- Category: optimization
+- Goal: test whether the strongest new architectures are being judged with the wrong training tail.
+- Main hypothesis: hybrid or routing-heavy architectures may want a different warmdown, stabilization, or final head/backbone cooldown than the old baseline.
+- Why it is worth the compute:
+- it targets compressed-model behavior directly
+- it can rescue promising architecture changes that fail under a mismatched schedule
+- Related tranche: `T-20260331-R`
+- Status: queued
+
+## Backlog
+
+### B-20260331-001 - Broad MLP Activation Audit
+
+- Category: architecture
+- Goal: compare `relu^2` against broader activation families such as `ReLU`, `SiLU`, `GELU`, and gated variants.
+- Main hypothesis: the current MLP may be good, but not necessarily best; the activation family itself may be a real frontier lever.
+- Why it is worth keeping:
+- the MLP is a large part of the model budget
+- this can become a full research branch and should not be rushed
+- Status: backlog
+
+### B-20260331-002 - Polynomial MLP Family
+
+- Category: architecture
+- Goal: test richer polynomial MLP variants such as `relu^3` and mixed quadratic/cubic forms once the broad activation family is mapped.
+- Main hypothesis: the current `relu^2` setup may only be one point in a larger useful polynomial design space.
+- Why it is worth keeping:
+- it follows naturally from the current nonstandard MLP choice
+- it deserves a dedicated follow-up tranche rather than a rushed side experiment
+- Status: backlog
+
 ### Q-20260330-004 - Skip/Residual Redesign
 
 - Category: architecture
