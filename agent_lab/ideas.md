@@ -453,3 +453,63 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - Evidence so far:
 - [`AL-20260331-008`](./experiments.tsv) was the only AttnRes-lite run that stayed near the older hybrid anchor.
 - [`AL-20260331-007`](./experiments.tsv), [`AL-20260331-009`](./experiments.tsv), and [`AL-20260331-010`](./experiments.tsv) suggest the main danger is applying dynamic depth routing too broadly.
+
+## 2026-04-01 STUVWX Closeout
+
+### Promote
+
+### I-20260401-001 - Refine The Hybrid Plus Skip-Gate Frontier
+
+- Category: architecture
+- Hypothesis: the new best line, [`AL-20260331-017`](./experiments.tsv), still has local headroom in mixer detail or routing strength because the stronger hybrid winner and the skip-gate win both looked robust rather than brittle.
+- Why it might work:
+- [`AL-20260331-016`](./experiments.tsv), [`AL-20260331-017`](./experiments.tsv), and [`AL-20260331-018`](./experiments.tsv) all improved on the old frontier
+- the new best is part of a small winning neighborhood, not a one-off
+- Status: active
+
+### I-20260401-002 - Narrow Top-Only Routing As A Secondary Combo Family
+
+- Category: architecture
+- Hypothesis: top-only dynamic routing may still have useful headroom, but only as a very narrow mechanism paired with clean fixed routing.
+- Why it might work:
+- [`AL-20260331-031`](./experiments.tsv), [`AL-20260331-032`](./experiments.tsv), and [`AL-20260331-035`](./experiments.tsv) all show the revived family is real
+- the winning shape is now much clearer: top-only, low-source, token-wise
+- Status: active
+
+### I-20260401-003 - Second-Generation Compression-Native Branch
+
+- Category: compression + architecture
+- Hypothesis: compression-aware architecture is still a gap in the lab, but the next useful version must be structurally different from naive low-rank factorization.
+- Why it might work:
+- the public frontier still suggests compression-native thinking matters
+- tranche `U` closed one mechanism family, not the whole compression-native agenda
+- Status: active
+
+### Park
+
+### I-20260401-004 - Plain Local-Window Attention On The Hybrid Backbone
+
+- Category: attention
+- Hypothesis: replacing the remaining global attention layers with local windows is the next frontier move.
+- Why parked:
+- the repaired local-attention tranche lost in every measured form
+- even the best top-two `512`-window version stayed clearly behind the frontier
+- Status: parked
+
+### I-20260401-005 - Broad Smooth-Activation MLP Replacement
+
+- Category: MLP
+- Hypothesis: the next MLP gain will come from swapping `relu^2` for a broad smooth activation family like SiLU or GELU.
+- Why parked:
+- both [`AL-20260331-038`](./experiments.tsv) and [`AL-20260331-039`](./experiments.tsv) lost clearly
+- the broad MLP family still belongs to `relu^2`
+- Status: parked
+
+### I-20260401-006 - Cubic-Heavy Polynomial MLPs
+
+- Category: MLP
+- Hypothesis: stronger cubic emphasis is the right next polynomial direction.
+- Why parked:
+- [`AL-20260331-042`](./experiments.tsv) and [`AL-20260331-044`](./experiments.tsv) both regressed clearly
+- the only live polynomial hint is the mixed linear-plus-quadratic form
+- Status: parked

@@ -4,63 +4,58 @@ This is the first-read dashboard for the current research state. Use this for th
 
 ## Current Best Valid
 
-- Experiment: [`AL-20260331-004`](./experiments.tsv)
-- Commit: `7641f2e`
+- Experiment: [`AL-20260331-017`](./experiments.tsv)
+- Commit: `1f2c07b`
 - Primary metric: `final_int8_ttt_lora`
-- Best `val_bpb`: `1.3451`
-- Winning branch shape: `9` layers, `MLP_MULT=2`, `MODEL_DIM=512`, `NUM_HEADS=4`, `NUM_KV_HEADS=2`, `TRAIN_BATCH_TOKENS=98304`, lower four attention layers replaced by sequence mixers with `MIXER_DIM=320`, `TIE_EMBEDDINGS=0`, `LOGIT_SOFTCAP=20`, `HEAD_LR=0.012`
-- Total artifact size: `15,035,357` bytes int8+zlib
+- Best `val_bpb`: `1.3429`
+- Winning branch shape: `9` layers, `MODEL_DIM=512`, `MLP_MULT=2`, `NUM_HEADS=4`, `NUM_KV_HEADS=2`, `TRAIN_BATCH_TOKENS=98304`, lower four attention layers replaced by sequence mixers with `MIXER_DIM=320`, untied dense head, `LOGIT_SOFTCAP=20`, `HEAD_LR=0.012`, plus shared scalar skip gates
+- Total artifact size: `15,025,513` bytes int8+zlib
 
 ## Best Secondary Valid
 
-- Experiment: [`AL-20260331-001`](./experiments.tsv)
-- Commit: `7641f2e`
+- Experiment: [`AL-20260331-035`](./experiments.tsv)
+- Commit: `1f2c07b`
 - Primary metric: `final_int8_ttt_lora`
-- Best `val_bpb`: `1.3453`
-- Branch shape: `9` layers with the lower three attention layers replaced by sequence mixers; otherwise same frontier controls
-- Total artifact size: `15,037,610` bytes int8+zlib
+- Best `val_bpb`: `1.3433`
+- Branch shape: current hybrid winner plus shared scalar skip gates and top-two-layer AttnRes-lite
+- Total artifact size: `14,948,987` bytes int8+zlib
 
-## Incomplete Family
+## Latest Completed Program
 
-- Tranche: [`T-20260330-L`](./tranches.md#t-20260330-l---local-global-attention-split)
-- Status: blocked
-- Why: [`AL-20260330-111`](./experiments.tsv) crashed before the first local-attention metric was produced
-- Next need: debug the local-window attention runtime before treating that family as tested
-
-## Active Tranche
-
-- Tranche: none
-- Goal: tranche `Q` is closed; choose the next architecture branch from a cleaner post-`PQR` state
-- Status: ready to pivot
+- Queue: `S -> T -> U -> V -> W -> X`
+- Status: completed
+- Summary:
+- `S` produced the new frontier and proved cheap routing stacks with the stronger hybrid winner
+- `T` ran successfully after the backend fix, but local attention still lost cleanly on the hybrid backbone
+- `U` showed that naive low-rank factorization is not yet a viable compression-native architecture
+- `V` revived dynamic depth routing in a narrow top-only form
+- `W` kept the broad MLP family anchored on `relu^2`
+- `X` showed mixed linear-plus-quadratic MLP structure is the only polynomial variant still near the frontier
 
 ## Working Beliefs
 
-- The hybrid mixer family still has headroom. Tranche `P` improved the frontier twice more, which means the original `AL-20260330-104` win was real but not locally exhausted.
-- Lower-stack replacement is robust rather than brittle. Lower three mixers, a wider mixer, and a wider mixer kernel all beat the old best; lower five mixers did not.
-- The best result so far is a stronger lower-four mixer, not a more aggressive lower-five placement. This suggests the frontier still wants some lower-stack attention, but the mixer mechanism itself was underpowered.
-- Dynamic depth routing was mostly the wrong fit in this first form. Late-layer AttnRes-lite failed badly, whether it used richer token-wise routing, cheaper shared routing, or the cheap-routing package underneath.
-- The only AttnRes-lite variant that stayed remotely alive was top-two-layer routing. That suggests dynamic depth selection, if useful at all, belongs only at the very top of the stack.
-- Output-head architecture was mostly a dead end. The existing dense untied head stayed clearly better than low-rank, bottleneck, and two-stage alternatives.
-- The output win from tranche F was about the dense untied head itself, not an obviously more parameter-efficient head architecture.
-- Skip/residual redesign is a live secondary family. Shared scalar skip gates helped, and the full cheap-routing package became the second-best new frontier.
-- Mechanism-specific learning rates look like support tools, not a frontier by themselves. Several variants nearly tied the old anchor, but none challenged the new hybrid-mixer frontier.
-- Architecture-specific schedules were mostly wrong on the hybrid winner. Broad warmdown still hurt, and even the best head-focused cooldown only tied the anchor at the noise level.
-- Output-path-sensitive cooldown remains the only live schedule hint, but it is still not a winner.
-- Local-global attention is still unresolved because the first local-window run crashed and the family never got a fair comparison.
+- The frontier now wants a hybrid lower stack plus cleaner routing. Lower-four sequence mixers remain the right backbone, and shared scalar skip gates are the cleanest stacking win on top of it.
+- Cheap routing really does stack with the hybrid winner. The new best run is not a brand-new family; it is the stronger hybrid backbone plus the simplest useful routing redesign.
+- Local attention on the remaining attention layers looks mostly wrong on this backbone. Even the best repaired local-window run lost clearly, and broader upper-stack locality was much worse.
+- Compression-native design is still a real gap, but naive low-rank factorization is not the answer. Attention factorization lost clearly, and MLP factorization collapsed the model.
+- Broad late-layer AttnRes-lite was the wrong routing shape, but a very narrow top-only version is now real. Top-one and top-two two-source routing both beat the old hybrid anchor, and the skip-gate combo got close to the new best.
+- The MLP family is still anchored on `relu^2`. Plain ReLU, SiLU, and GELU all lost clearly on the current backbone.
+- The only broad-family MLP near-miss was gated SiLU, but it broke the size cap. That makes it a later capacity/compression question, not an immediate replacement.
+- Inside the polynomial family, cubic structure looks wrong. The only live hint is `relu + 0.5 * relu^2`, which stayed very close to the frontier without beating it.
 
 ## Open Questions
 
-- Can the cheap-routing package stack with the new stronger hybrid winner, or are they redundant?
-- Is top-of-stack-only dynamic depth routing worth a much lighter second-generation revisit, or is the AttnRes family mostly closed already?
-- What exactly is crashing in the local-attention path, and is that family still worth finishing once debugged?
-- Is there any architecture-specific schedule win left beyond output-path-sensitive cooldown, or is this family mostly closed?
+- Does the `AL-20260331-017` winner still have local headroom in mixer width, kernel, or routing strength, or is this branch now mostly polished?
+- Is the narrow top-only dynamic routing line genuinely complementary to the skip-gate winner, or did [`AL-20260331-035`](./experiments.tsv) already capture most of that interaction?
+- If compression-native architecture is still important, what should replace naive low-rank factorization as the first serious branch?
+- Should the next MLP follow-up focus only on the two live survivors: gated MLPs under tighter size control and mixed linear-plus-quadratic polynomial forms?
 
 ## Next Planned Runs
 
-- next tranche candidate: hybrid-mixer plus cheap-routing combo around [`AL-20260331-004`](./experiments.tsv)
-- next tranche candidate: local-global attention debug and completion
-- next tranche candidate: only if justified later, a much lighter top-of-stack AttnRes follow-up
-- later backlog: two dedicated MLP exploration tranches, broad-family first and polynomial second
+- next tranche candidate: refine the `AL-20260331-017` winner rather than leaving the new frontier half-mapped
+- next tranche candidate: a narrow follow-up on top-only dynamic routing, only if it is justified as a real complement to shared skip gates
+- next tranche candidate: a second-generation compression-native branch that is not just low-rank factorization
+- later backlog: deeper MLP follow-up around gated SiLU under size control and `relu + quadratic` structured variants
 
 ## Go Deeper
 

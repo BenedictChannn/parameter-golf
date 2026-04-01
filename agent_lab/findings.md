@@ -379,3 +379,79 @@ Use [`state.md`](./state.md) for the live dashboard, [`ideas.md`](./ideas.md) fo
 - this only tests one combo form; a future top-only or much lighter depth-routing design could still interact differently.
 - Next falsification:
 - if routing combo work is revisited, combine cheap routing only with top-of-stack dynamic routing, not the broad late-layer AttnRes-lite design.
+
+## F-20260401-031: Shared Skip Gates Are The Cleanest Stacking Win On The Hybrid Frontier
+
+- Claim: the strongest routing change to pair with the widened lower-four-mixer winner is shared scalar skip gating, not the full cheap-routing package.
+- Confidence: high
+- Evidence:
+- [`AL-20260331-017`](./experiments.tsv) is the current best valid run at `1.3429`.
+- [`AL-20260331-016`](./experiments.tsv) also won, but the full routing package was slightly worse than skip gates alone.
+- Counterevidence:
+- [`AL-20260331-018`](./experiments.tsv) shows scalar `resid_mix` is also compatible, so the story is not exclusively about skip gates.
+- Next falsification:
+- test whether the `AL-20260331-017` line still wants any additional routing simplification, or whether skip gates already capture nearly all of the available gain.
+
+## F-20260401-032: Local Attention On The Remaining Attention Stack Is Mostly The Wrong Trade
+
+- Claim: once the lower stack is already mixer-heavy, localizing the remaining attention layers hurts more than it helps.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260331-022`](./experiments.tsv) failed badly with four upper local-attention layers.
+- [`AL-20260331-023`](./experiments.tsv) was the best repaired local-window run, but still lost clearly at `1.3545`.
+- [`AL-20260331-024`](./experiments.tsv) and [`AL-20260331-025`](./experiments.tsv) also lost cleanly.
+- Counterevidence:
+- [`AL-20260331-021`](./experiments.tsv) crashed before producing the lightest top-two-local `256` result, so that exact point remains unmeasured.
+- Next falsification:
+- only revisit this family if there is a new theory beyond plain windowed local attention on the surviving attention layers.
+
+## F-20260401-033: Naive Low-Rank Factorization Is Not Yet A Viable Compression-Native Backbone
+
+- Claim: the first compression-native branch failed because straightforward low-rank factorization removes too much useful structure from the current hybrid winner.
+- Confidence: high
+- Evidence:
+- [`AL-20260331-026`](./experiments.tsv) and [`AL-20260331-027`](./experiments.tsv) both lost clearly despite saving bytes.
+- [`AL-20260331-028`](./experiments.tsv) and [`AL-20260331-029`](./experiments.tsv) show that MLP factorization is far more destructive still.
+- [`AL-20260331-030`](./experiments.tsv) confirms that combining the two does not rescue the idea.
+- Counterevidence:
+- the branch only tested one compression-native mechanism family; it does not rule out other quantization-aware or structure-aware designs.
+- Next falsification:
+- the next compression-native tranche should test a qualitatively different mechanism, not just another rank sweep.
+
+## F-20260401-034: Top-Only Dynamic Routing Is A Real Secondary Family
+
+- Claim: dynamic depth routing is only viable on this frontier when it is kept extremely narrow: top-only, low-source, and preferably paired with clean fixed routing.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260331-031`](./experiments.tsv) and [`AL-20260331-032`](./experiments.tsv) both beat the older hybrid anchor.
+- [`AL-20260331-035`](./experiments.tsv) at `1.3433` became the second-best run in the whole `S` through `X` queue.
+- [`AL-20260331-033`](./experiments.tsv) and [`AL-20260331-034`](./experiments.tsv) show that coarse shared routing and extra source complexity both make the top-only line worse.
+- Counterevidence:
+- even the best top-only result still lost to [`AL-20260331-017`](./experiments.tsv), so the family is secondary rather than dominant.
+- Next falsification:
+- if revisited, keep the router top-only and light; do not return to broad late-layer routing.
+
+## F-20260401-035: The Broad MLP Family Still Belongs To ReLU-Squared
+
+- Claim: on the current hybrid frontier, `relu^2` remains the right broad MLP family and the smooth replacements are not competitive.
+- Confidence: high
+- Evidence:
+- [`AL-20260331-036`](./experiments.tsv) reproduced the frontier class under the new MLP-mode surface.
+- [`AL-20260331-037`](./experiments.tsv), [`AL-20260331-038`](./experiments.tsv), and [`AL-20260331-039`](./experiments.tsv) all regressed clearly.
+- Counterevidence:
+- [`AL-20260331-040`](./experiments.tsv) suggests a gated MLP could still be interesting if its size cost is brought under control.
+- Next falsification:
+- if the MLP family is revisited soon, focus on size-controlled gated variants rather than plain smooth activations.
+
+## F-20260401-036: Mixed Linear-Plus-Quadratic MLPs Are The Only Live Polynomial Variant
+
+- Claim: inside the polynomial family, the only variant that stayed near the frontier was mixing linear and quadratic behavior; cubic structure mostly hurt.
+- Confidence: medium
+- Evidence:
+- [`AL-20260331-043`](./experiments.tsv) at `1.3444` was the best non-anchor MLP result in the polynomial tranche.
+- [`AL-20260331-042`](./experiments.tsv) and [`AL-20260331-044`](./experiments.tsv) show that cubic-heavy variants regress clearly.
+- [`AL-20260331-045`](./experiments.tsv) stayed close but still did not beat the plain `relu^2` baseline.
+- Counterevidence:
+- the gains over the anchor are still small, so this is a later refinement path rather than a proven new frontier family.
+- Next falsification:
+- if polynomial MLPs are revisited, treat `relu + quadratic` as the anchor and ignore cubic-heavy forms unless a new theory justifies them.

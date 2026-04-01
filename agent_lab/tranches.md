@@ -955,3 +955,187 @@ Do the current hybrid winner and similar bold architectures want a different war
 
 - no new winner from this tranche
 - main conclusion: broad warmdown remains the wrong story even on the improved hybrid backbone, and schedule work should stay secondary to architecture
+
+## T-20260331-S: Hybrid Mixer + Cheap Routing Combo
+
+**Status:** completed
+
+**Goal**  
+Test whether the stronger hybrid-mixer winner and the cheap-routing redesign are complementary or redundant.
+
+**Anchor**
+
+- [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+
+**Results**
+
+- [`AL-20260331-016`](./experiments.tsv) (`S1`, full cheap-routing package) improved to `1.3434`.
+- [`AL-20260331-017`](./experiments.tsv) (`S2`, shared scalar skip gates only) became the new best valid run at `1.3429`.
+- [`AL-20260331-018`](./experiments.tsv) (`S3`, scalar `resid_mix` only) also improved to `1.3437`.
+- [`AL-20260331-019`](./experiments.tsv) (`S4`, shared residual scales only) lost at `1.3465`.
+- [`AL-20260331-020`](./experiments.tsv) (`S5`, full cheap-routing package plus head cooldown) stayed strong at `1.3445`, but did not beat the simpler skip-gate variant.
+
+**Reading**
+
+- the hybrid winner and routing redesign are genuinely complementary
+- the main compatible piece is shared skip gating
+- scalar `resid_mix` also stacks cleanly, but shared residual scales alone do not
+- adding schedule help on top of the combo was unnecessary in this first pass
+
+**Outcome**
+
+- new best valid run: [`AL-20260331-017`](./experiments.tsv) at `1.3429`
+- main conclusion: the frontier now prefers the widened lower-four-mixer backbone plus shared scalar skip gates
+
+## T-20260331-T: Local-Global Attention Recovery
+
+**Status:** completed
+
+**Goal**  
+After fixing the local-attention backend bug, test whether the remaining attention layers in the hybrid winner still need full global context.
+
+**Anchor**
+
+- [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+
+**Runtime note**
+
+- [`AL-20260331-021`](./experiments.tsv) crashed because the trainer had no valid SDP backend for masked local attention. That was later fixed by enabling a math-SDP fallback when local attention is active.
+
+**Results**
+
+- [`AL-20260331-022`](./experiments.tsv) (`T2`, four upper local layers, window `256`) failed badly at `1.3813`.
+- [`AL-20260331-023`](./experiments.tsv) (`T3`, top two local layers, window `512`) was the cleanest repaired run at `1.3545`, but still lost clearly.
+- [`AL-20260331-024`](./experiments.tsv) (`T4`, alternating upper local layers, window `256`) landed at `1.3603`.
+- [`AL-20260331-025`](./experiments.tsv) (`T5`, top two local layers, window `128`) landed at `1.3582`.
+
+**Reading**
+
+- local attention on the surviving attention stack is mostly the wrong trade on this backbone
+- the best repaired run was the widest top-only window, which says the family is not completely random
+- but nothing in this tranche threatened the frontier
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: plain local-window replacement of the remaining attention layers should be parked unless a new architecture theory emerges
+
+## T-20260331-U: Compression-Native Backbone Audit
+
+**Status:** completed
+
+**Goal**  
+Test whether low-rank factorization can act as a first compression-native architecture branch on top of the hybrid winner.
+
+**Anchor**
+
+- [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+
+**Results**
+
+- [`AL-20260331-026`](./experiments.tsv) (`U1`, factorized attention rank `128`) landed at `1.3689`.
+- [`AL-20260331-027`](./experiments.tsv) (`U2`, factorized attention rank `64`) landed at `1.3702`.
+- [`AL-20260331-028`](./experiments.tsv) (`U3`, factorized MLP rank `256`) collapsed to `1.8307`.
+- [`AL-20260331-029`](./experiments.tsv) (`U4`, factorized MLP rank `128`) collapsed further to `2.1075`.
+- [`AL-20260331-030`](./experiments.tsv) (`U5`, combined attention+MLP factorization) landed at `1.4604`.
+
+**Reading**
+
+- naive low-rank factorization is not the right compression-native mechanism here
+- attention factorization preserves more than MLP factorization, but still loses too much quality
+- the MLP path is especially intolerant of this style of factorization
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: compression-native design remains important, but the next branch should not be another simple rank sweep
+
+## T-20260331-V: Top-Only Dynamic Depth Routing Revisit
+
+**Status:** completed
+
+**Goal**  
+Revisit AttnRes-lite only in the one region where the earlier tranche gave a weak positive signal: the very top of the stack.
+
+**Anchor**
+
+- [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+
+**Results**
+
+- [`AL-20260331-031`](./experiments.tsv) (`V1`, final layer only, two sources) improved to `1.3440`.
+- [`AL-20260331-032`](./experiments.tsv) (`V2`, top two layers, two sources) improved to `1.3443`.
+- [`AL-20260331-033`](./experiments.tsv) (`V3`, top-two shared-scalar routing) regressed to `1.3526`.
+- [`AL-20260331-034`](./experiments.tsv) (`V4`, final layer, three sources) regressed to `1.3465`.
+- [`AL-20260331-035`](./experiments.tsv) (`V5`, top-two routing plus shared skip gates) reached `1.3433`.
+
+**Reading**
+
+- top-only dynamic routing is a real secondary family
+- the revived family wants token-wise routing and very few source states
+- shared skip gates are complementary with the narrow top-only router
+- even the best result still trails the simpler skip-gate winner from tranche `S`
+
+**Outcome**
+
+- best result from this tranche: [`AL-20260331-035`](./experiments.tsv) at `1.3433`
+- main conclusion: dynamic depth routing is only viable when it is kept extremely narrow and top-heavy
+
+## T-20260331-W: Broad MLP Family Audit
+
+**Status:** completed
+
+**Goal**  
+Test whether the current `relu^2` MLP is actually the right broad activation family on the hybrid frontier.
+
+**Anchor**
+
+- [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+
+**Results**
+
+- [`AL-20260331-036`](./experiments.tsv) (`W1`, `relu^2`) reproduced the frontier class at `1.3449`.
+- [`AL-20260331-037`](./experiments.tsv) (`W2`, `ReLU`) regressed to `1.3619`.
+- [`AL-20260331-038`](./experiments.tsv) (`W3`, `SiLU`) regressed to `1.3605`.
+- [`AL-20260331-039`](./experiments.tsv) (`W4`, `GELU`) regressed to `1.3607`.
+- [`AL-20260331-040`](./experiments.tsv) (`W5`, gated `SiLU`) stayed competitive at `1.3460`, but broke the size cap at `19.06 MB`.
+
+**Reading**
+
+- the broad MLP family still belongs to `relu^2`
+- smooth activation replacements are clearly worse on this backbone
+- the only live alternative is gated `SiLU`, but its size cost makes it a later compression/capacity problem rather than an immediate winner
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: keep `relu^2` as the broad MLP family anchor and only revisit gating under tighter size control
+
+## T-20260331-X: Polynomial MLP Audit
+
+**Status:** completed
+
+**Goal**  
+Probe deeper inside the polynomial MLP family rather than only comparing broad activation families.
+
+**Anchor**
+
+- [`AL-20260331-041`](./experiments.tsv) at `1.3451`
+
+**Results**
+
+- [`AL-20260331-042`](./experiments.tsv) (`X2`, `relu^3`) regressed badly to `1.3630`.
+- [`AL-20260331-043`](./experiments.tsv) (`X3`, `relu + 0.5 relu^2`) was the best non-anchor result at `1.3444`.
+- [`AL-20260331-044`](./experiments.tsv) (`X4`, `relu^2` plus cubic term) regressed to `1.3532`.
+- [`AL-20260331-045`](./experiments.tsv) (`X5`, norm-before-square) stayed near the frontier at `1.3456`, but still lost.
+
+**Reading**
+
+- cubic-heavy polynomial structure is the wrong direction
+- the only live alternative inside this family is mixing linear and quadratic behavior
+- normalization before squaring is respectable, but not obviously better than the plain baseline
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: if the MLP family is revisited later, use `relu + quadratic` as the live polynomial branch and ignore cubic-heavy variants
