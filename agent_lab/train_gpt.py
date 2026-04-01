@@ -1552,7 +1552,9 @@ def main() -> None:
     enable_cudnn_sdp(False)
     enable_flash_sdp(True)
     enable_mem_efficient_sdp(False)
-    enable_math_sdp(False)
+    # Local-window attention uses an explicit mask; flash-only SDP rejects that path.
+    # Keep math SDP available when any local-attention layers are active.
+    enable_math_sdp(bool(os.environ.get("LOCAL_ATTN_LAYERS", "").strip()))
 
     logfile = None
     if master_process:
