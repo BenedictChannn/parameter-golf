@@ -1,0 +1,12 @@
+{
+  "program_id": "P-20260401-YZABAA",
+  "title": "Next Bold Architecture Questions",
+  "description": "Planned next-stage architecture queue: question the MLP structure itself, then block uniformity, then compression-native sharing, then upper-attention decomposition.",
+  "implementation_status": "planned",
+  "tranches": [
+    "agent_lab/tranche_manifests/planned/20260401-Y-mlp-structure-minimalism.json",
+    "agent_lab/tranche_manifests/planned/20260401-Z-block-uniformity-audit.json",
+    "agent_lab/tranche_manifests/planned/20260401-AB-compression-native-sharing.json",
+    "agent_lab/tranche_manifests/planned/20260401-AA-upper-attention-decomposition.json"
+  ]
+}

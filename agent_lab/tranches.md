@@ -1139,3 +1139,135 @@ Probe deeper inside the polynomial MLP family rather than only comparing broad a
 
 - no new winner from this tranche
 - main conclusion: if the MLP family is revisited later, use `relu + quadratic` as the live polynomial branch and ignore cubic-heavy variants
+
+## Planned Next Bold Question Queue
+
+These are the next planned tranche blueprints after `S` through `X`. They are design-ready, but they are **not runnable yet**. They live under [`tranche_manifests/planned/`](./tranche_manifests/planned/) and require code support before execution.
+
+Recommended order:
+
+1. [`T-20260401-Y`](./tranche_manifests/planned/20260401-Y-mlp-structure-minimalism.json) MLP Structure Minimalism
+2. [`T-20260401-Z`](./tranche_manifests/planned/20260401-Z-block-uniformity-audit.json) Block Uniformity Audit
+3. [`T-20260401-AB`](./tranche_manifests/planned/20260401-AB-compression-native-sharing.json) Compression-Native Sharing Audit
+4. [`T-20260401-AA`](./tranche_manifests/planned/20260401-AA-upper-attention-decomposition.json) Upper Attention Decomposition Audit
+
+Top-level planned chain:
+
+- [`P-20260401-YZABAA`](./program_manifests/20260401-YZABAA-planned.json)
+
+### T-20260401-Y: MLP Structure Minimalism
+
+**Status:** planned
+
+**Goal**  
+Question the dense expand-project FFN assumption directly instead of only comparing activation families.
+
+**Main question**  
+Does every block really need a full dense project-up then project-down MLP, or can some of that structure be removed or replaced by a lighter tokenwise computation?
+
+**Why this is next-worthy**
+
+- it attacks one of the biggest unproven assumptions in the whole model
+- the MLP is a major parameter and compute sink
+- our current findings tell us which nonlinear families are live, but not whether the FFN structure itself is overbuilt
+
+**Planned experiments**
+
+- `Y1`: no-expand in-place quadratic MLP everywhere
+- `Y2`: half-width dense MLP everywhere
+- `Y3`: structured linear-plus-quadratic no-expand MLP
+- `Y4`: light lower-stack MLP, full upper-stack MLP
+- `Y5`: full top-stack MLP, lighter MLP elsewhere
+
+**Key interpretation**
+
+- if `Y1` or `Y3` survives, full expand-project FFNs are overbuilt
+- if `Y4` or `Y5` survives, MLP richness is a depth-specific resource
+
+### T-20260401-Z: Block Uniformity Audit
+
+**Status:** planned
+
+**Goal**  
+Question the assumption that every layer deserves the same full block recipe.
+
+**Main question**  
+Why should every block contain both token mixing and an FFN, and can some stages use mixer-only or MLP-light blocks instead?
+
+**Why this is next-worthy**
+
+- it is one of the cleanest childlike architectural questions available
+- the repo already rewards strong depth specialization
+- it attacks compute uniformity rather than just another local knob
+
+**Planned experiments**
+
+- `Z1`: lower two mixer layers become mixer-only blocks
+- `Z2`: lower four mixer layers become mixer-only blocks
+- `Z3`: alternate standard and mixer-only blocks in the lower stack
+- `Z4`: lower stack uses MLP-light blocks, upper stack uses full blocks
+- `Z5`: periodic heavy blocks every two layers
+
+**Key interpretation**
+
+- if `Z1`, `Z3`, or `Z4` works, the current block template is too uniform
+- if `Z5` works, compute should be concentrated rather than evenly distributed
+
+### T-20260401-AB: Compression-Native Sharing Audit
+
+**Status:** planned
+
+**Goal**  
+Try a compression-native architecture direction that is qualitatively different from naive low-rank factorization.
+
+**Main question**  
+Can stage-specific structure be shared across similar layers, so the model stops relearning the same transformation with different private weights?
+
+**Why this is next-worthy**
+
+- low-rank factorization already failed clearly
+- compression-native design is still one of our biggest open gaps
+- the current frontier theory says lower and upper stages each do repeated specialized jobs, which makes sharing plausible
+
+**Planned experiments**
+
+- `AB1`: share weights across the lower two mixer blocks
+- `AB2`: share weights across all four lower mixer blocks
+- `AB3`: share weights across the top two attention blocks
+- `AB4`: share lower mixer weights and reinvest into a wider mixer
+- `AB5`: share lower mixer weights and reinvest into one more upper reasoning layer
+
+**Key interpretation**
+
+- if `AB1` or `AB2` works, the lower stage is structurally repetitive and overparameterized
+- if `AB4` or `AB5` wins, sharing is useful mainly as reallocation rather than pure savings
+
+### T-20260401-AA: Upper Attention Decomposition Audit
+
+**Status:** planned
+
+**Goal**  
+Question what the remaining upper attention layers are actually doing now that the lower stack is already simplified.
+
+**Main question**  
+How much full global attention does the upper stack still need, and is the very top of the network doing a qualitatively different reasoning job?
+
+**Why this is next-worthy**
+
+- local-window replacement lost, but that only killed one simplification story
+- we still have not isolated which pieces of the remaining upper attention are essential
+- top-only routing being alive hints that the top of the stack may be special
+
+**Planned experiments**
+
+- `AA1`: keep only top three layers as full global attention
+- `AA2`: keep only top two layers as full global attention
+- `AA3`: top two global-attention layers plus top-only routing
+- `AA4`: interleave upper attention and upper lighter refinement blocks
+- `AA5`: one final rich global reasoner layer only
+
+**Key interpretation**
+
+- if `AA1` or `AA2` works, upper attention is over-provisioned
+- if `AA3` works, top-of-stack routing is part of final reasoning
+- if `AA4` works, periodic global refresh beats dense upper attention

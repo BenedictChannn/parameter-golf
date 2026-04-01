@@ -485,6 +485,49 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - tranche `U` closed one mechanism family, not the whole compression-native agenda
 - Status: active
 
+### I-20260401-007 - MLP Structure Minimalism
+
+- Category: MLP + block design
+- Hypothesis: the current model may not need a full dense project-up then project-down MLP in every block; some of that structure may be inherited rather than earned.
+- Why it might work:
+- the MLP dominates a large share of parameters and compute
+- `relu^2` is strong, but we have only tested activation families, not whether the whole FFN structure is overbuilt
+- mixed linear-plus-quadratic behavior already showed one live hint
+- Manifest: [`20260401-Y-mlp-structure-minimalism.json`](./tranche_manifests/planned/20260401-Y-mlp-structure-minimalism.json)
+- Status: active
+
+### I-20260401-008 - Block Uniformity Audit
+
+- Category: block topology
+- Hypothesis: the model may be overpaying for a uniform block recipe where some stages only need token mixing and others carry the expensive per-token refinement burden.
+- Why it might work:
+- the repo already rewards depth specialization strongly
+- lower mixer-heavy layers may not need a full FFN after every mixing step
+- this questions one of the strongest inherited transformer assumptions directly
+- Manifest: [`20260401-Z-block-uniformity-audit.json`](./tranche_manifests/planned/20260401-Z-block-uniformity-audit.json)
+- Status: active
+
+### I-20260401-009 - Compression-Native Sharing
+
+- Category: compression + architecture
+- Hypothesis: the next viable compression-native branch is structured sharing or reuse across similar layers, not another low-rank factorization sweep.
+- Why it might work:
+- naive low-rank factorization already failed cleanly
+- the current frontier theory says lower and upper stages each perform repeated specialized jobs, which makes sharing plausible
+- Manifest: [`20260401-AB-compression-native-sharing.json`](./tranche_manifests/planned/20260401-AB-compression-native-sharing.json)
+- Status: active
+
+### I-20260401-010 - Upper Attention Decomposition
+
+- Category: attention + topology
+- Hypothesis: the surviving upper attention stack is still over-provisioned, and only a very small number of true global reasoning layers may actually be necessary.
+- Why it might work:
+- local-window replacement lost, but that only killed one simplification story
+- we still have not isolated which parts of the remaining upper attention are essential
+- top-only routing being alive hints that the very top of the stack may be doing a distinct job
+- Manifest: [`20260401-AA-upper-attention-decomposition.json`](./tranche_manifests/planned/20260401-AA-upper-attention-decomposition.json)
+- Status: active
+
 ### Park
 
 ### I-20260401-004 - Plain Local-Window Attention On The Hybrid Backbone
