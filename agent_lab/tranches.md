@@ -1140,24 +1140,24 @@ Probe deeper inside the polynomial MLP family rather than only comparing broad a
 - no new winner from this tranche
 - main conclusion: if the MLP family is revisited later, use `relu + quadratic` as the live polynomial branch and ignore cubic-heavy variants
 
-## Planned Next Bold Question Queue
+## Next Bold Question Queue
 
-These are the next planned tranche blueprints after `S` through `X`. They are design-ready, but they are **not runnable yet**. They live under [`tranche_manifests/planned/`](./tranche_manifests/planned/) and require code support before execution.
+These are the next architecture tranches after `S` through `X`. They are now **runnable** and live under [`tranche_manifests/`](./tranche_manifests/).
 
 Recommended order:
 
-1. [`T-20260401-Y`](./tranche_manifests/planned/20260401-Y-mlp-structure-minimalism.json) MLP Structure Minimalism
-2. [`T-20260401-Z`](./tranche_manifests/planned/20260401-Z-block-uniformity-audit.json) Block Uniformity Audit
-3. [`T-20260401-AB`](./tranche_manifests/planned/20260401-AB-compression-native-sharing.json) Compression-Native Sharing Audit
-4. [`T-20260401-AA`](./tranche_manifests/planned/20260401-AA-upper-attention-decomposition.json) Upper Attention Decomposition Audit
+1. [`T-20260401-Y`](./tranche_manifests/20260401-Y-mlp-structure-minimalism.json) MLP Structure Minimalism
+2. [`T-20260401-Z`](./tranche_manifests/20260401-Z-block-uniformity-audit.json) Block Uniformity Audit
+3. [`T-20260401-AB`](./tranche_manifests/20260401-AB-compression-native-sharing.json) Compression-Native Sharing Audit
+4. [`T-20260401-AA`](./tranche_manifests/20260401-AA-upper-attention-decomposition.json) Upper Attention Decomposition Audit
 
-Top-level planned chain:
+Top-level chain:
 
-- [`P-20260401-YZABAA`](./program_manifests/20260401-YZABAA-planned.json)
+- [`P-20260401-YZABAA`](./program_manifests/20260401-YZABAA.json)
 
 ### T-20260401-Y: MLP Structure Minimalism
 
-**Status:** planned
+**Status:** runnable
 
 **Goal**  
 Question the dense expand-project FFN assumption directly instead of only comparing activation families.
@@ -1186,7 +1186,7 @@ Does every block really need a full dense project-up then project-down MLP, or c
 
 ### T-20260401-Z: Block Uniformity Audit
 
-**Status:** planned
+**Status:** runnable
 
 **Goal**  
 Question the assumption that every layer deserves the same full block recipe.
@@ -1215,7 +1215,7 @@ Why should every block contain both token mixing and an FFN, and can some stages
 
 ### T-20260401-AB: Compression-Native Sharing Audit
 
-**Status:** planned
+**Status:** runnable
 
 **Goal**  
 Try a compression-native architecture direction that is qualitatively different from naive low-rank factorization.
@@ -1244,7 +1244,7 @@ Can stage-specific structure be shared across similar layers, so the model stops
 
 ### T-20260401-AA: Upper Attention Decomposition Audit
 
-**Status:** planned
+**Status:** runnable
 
 **Goal**  
 Question what the remaining upper attention layers are actually doing now that the lower stack is already simplified.

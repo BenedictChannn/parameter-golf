@@ -1,0 +1,101 @@
+{
+  "tranche_id": "T-20260401-Y",
+  "title": "MLP Structure Minimalism",
+  "research_question": "Does the model really need a full dense project-up then project-down MLP in every block, or is that inherited structure now overbuilt on the hybrid frontier?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-017",
+  "implementation_status": "runnable",
+  "implementation_notes": [
+    "Implemented via MLP_STRUCTURE plus depth-selective MLP_LIGHT_LAYERS / MLP_FULL_LAYERS controls.",
+    "Supports no-expand tokenwise MLPs, structured linear-plus-quadratic paths, and hybrid lower-light / top-full MLP plans.",
+    "Preserves the current hybrid lower-four-mixer plus shared skip-gate frontier as the base backbone."
+  ],
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "SKIP_MODE": "shared_scalar",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "y1-no-expand-quadratic-all-layers",
+      "exp_id": "AL-20260401-046",
+      "goal": "Test the blunt childlike version of the question first.",
+      "hypothesis": "A per-token in-place quadratic transform may retain enough MLP value without a full hidden expansion.",
+      "what_it_teaches": "Whether hidden expansion is core or mostly a convenience.",
+      "why_worthy": "This attacks one of the most unquestioned structural assumptions in the model.",
+      "description": "replace every block MLP with an in-place quadratic token transform and one learned output mixing step",
+      "env": {
+        "MLP_STRUCTURE": "no_expand_quad"
+      }
+    },
+    {
+      "name": "y2-half-width-dense-mlp",
+      "exp_id": "AL-20260401-047",
+      "goal": "Test whether the MLP still needs expansion, but much less of it.",
+      "hypothesis": "The model still wants dense expand-project FFNs, but current expansion width is larger than necessary.",
+      "what_it_teaches": "Whether the win is in expansion at all or just in having some nonlinear hidden room.",
+      "why_worthy": "This is the cleanest control between full structure and total removal of expansion.",
+      "description": "cut the MLP hidden expansion in half everywhere while keeping the same relu^2 family",
+      "env": {
+        "MLP_STRUCTURE": "dense",
+        "MLP_MULT": "1"
+      }
+    },
+    {
+      "name": "y3-structured-linear-plus-quadratic-no-up",
+      "exp_id": "AL-20260401-048",
+      "goal": "Test whether feature shaping, not width, is the useful part of the MLP.",
+      "hypothesis": "A structured linear-plus-quadratic token path without a full project-up can recover most of the useful MLP behavior.",
+      "what_it_teaches": "Whether the live polynomial hint can replace wide hidden expansion.",
+      "why_worthy": "This is the most justified nontrivial no-expand design because relu-plus-quadratic already showed promise.",
+      "description": "replace the dense MLP with a structured linear-plus-quadratic tokenwise path without full hidden expansion",
+      "env": {
+        "MLP_STRUCTURE": "no_expand_linear_quad"
+      }
+    },
+    {
+      "name": "y4-light-lower-full-upper-mlp",
+      "exp_id": "AL-20260401-049",
+      "goal": "Test whether lower mixer-heavy layers need much less per-token compute.",
+      "hypothesis": "The lower stack may no longer need expensive FFNs once it is already mixer-heavy, while upper attention layers still do.",
+      "what_it_teaches": "Whether MLP richness is a depth-specific resource.",
+      "why_worthy": "This directly follows the repo's strongest theme: different depths want different jobs.",
+      "description": "use a light no-expand MLP only in lower mixer layers and keep the full dense MLP in upper attention layers",
+      "env": {
+        "MLP_STRUCTURE": "hybrid_lower_light",
+        "MLP_LIGHT_LAYERS": "0,1,2,3"
+      }
+    },
+    {
+      "name": "y5-full-top-light-rest-mlp",
+      "exp_id": "AL-20260401-050",
+      "goal": "Test whether rich per-token refinement is mainly a top-of-stack job.",
+      "hypothesis": "Only the upper output-facing layers need a full dense MLP, while the rest can use a lighter tokenwise path.",
+      "what_it_teaches": "Whether MLP burden is concentrated near the top rather than spread uniformly.",
+      "why_worthy": "This directly challenges the assumption that every layer deserves the same MLP strength.",
+      "description": "keep a full dense MLP only near the top of the stack and use a lighter tokenwise MLP elsewhere",
+      "env": {
+        "MLP_STRUCTURE": "hybrid_top_full",
+        "MLP_FULL_LAYERS": "6,7,8"
+      }
+    }
+  ]
+}

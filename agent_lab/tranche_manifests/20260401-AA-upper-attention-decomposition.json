@@ -1,0 +1,99 @@
+{
+  "tranche_id": "T-20260401-AA",
+  "title": "Upper Attention Decomposition Audit",
+  "research_question": "Now that the lower stack is simplified, how much full global attention does the upper stack really need, and which parts of the remaining upper attention machinery are still essential?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-017",
+  "implementation_status": "runnable",
+  "implementation_notes": [
+    "Implemented via UPPER_ATTN_PLAN, which derives new upper-stack mixer-vs-attention layouts from the current hybrid frontier base.",
+    "ATTNRES_PLAN adds the narrow top-only routing variant needed for the combo candidate.",
+    "This avoids repeating the dead plain-local-window family and instead questions which upper layers still need full global attention."
+  ],
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "SKIP_MODE": "shared_scalar",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "aa1-only-top3-global-attention",
+      "exp_id": "AL-20260401-056",
+      "goal": "Test whether the upper-middle attention layer is less essential than the final three reasoning layers.",
+      "hypothesis": "The model may only need the top three layers as true global attention reasoners.",
+      "what_it_teaches": "Whether upper attention is over-provisioned.",
+      "why_worthy": "This is the cleanest first test of how little global attention the upper stack really needs.",
+      "description": "keep only the top three layers as full global-attention layers and simplify the rest of the upper stack",
+      "env": {
+        "UPPER_ATTN_PLAN": "top3_global"
+      }
+    },
+    {
+      "name": "aa2-only-top2-global-attention",
+      "exp_id": "AL-20260401-057",
+      "goal": "Push the upper-attention minimalism story harder.",
+      "hypothesis": "Most true global reasoning may happen only at the very top two layers.",
+      "what_it_teaches": "Whether the surviving upper attention stack can be thinned further without collapse.",
+      "why_worthy": "This is the bold version of the same architectural question, not just a nearby tweak.",
+      "description": "keep only the top two layers as full global-attention layers and simplify the rest of the upper stack",
+      "env": {
+        "UPPER_ATTN_PLAN": "top2_global"
+      }
+    },
+    {
+      "name": "aa3-top2-global-plus-top-routing",
+      "exp_id": "AL-20260401-058",
+      "goal": "Test whether sparse upper attention works better when coupled to top-only routing.",
+      "hypothesis": "Once only a tiny set of global attention layers remains, top-only routing helps select the right depth information.",
+      "what_it_teaches": "Whether top-of-stack routing is part of the final reasoning stage rather than a separate side mechanism.",
+      "why_worthy": "This is the one justified interaction test inside the upper-attention question.",
+      "description": "use only two upper global-attention layers and add a top-only narrow routing module",
+      "env": {
+        "UPPER_ATTN_PLAN": "top2_global",
+        "ATTNRES_PLAN": "top_only_two_source"
+      }
+    },
+    {
+      "name": "aa4-interleave-upper-attn-and-mixer",
+      "exp_id": "AL-20260401-059",
+      "goal": "Test whether periodic global refresh is enough instead of contiguous upper attention.",
+      "hypothesis": "Interleaving upper attention and lighter upper mixer/refinement blocks may preserve enough global reasoning.",
+      "what_it_teaches": "Whether periodic global refresh beats dense upper attention.",
+      "why_worthy": "This tests a distinct topology idea rather than just removing one more attention layer.",
+      "description": "interleave global-attention and lighter refinement blocks through the upper stack",
+      "env": {
+        "UPPER_ATTN_PLAN": "interleaved"
+      }
+    },
+    {
+      "name": "aa5-single-final-reasoner",
+      "exp_id": "AL-20260401-060",
+      "goal": "Test the strongest output-facing specialization story.",
+      "hypothesis": "The model may want one dominant final reasoning layer more than many medium-strength upper attention layers.",
+      "what_it_teaches": "Whether the very last layer is doing a qualitatively different job from the rest of the upper stack.",
+      "why_worthy": "This directly questions the assumption that the final attention stage should be spread across many layers.",
+      "description": "use one final rich global-attention reasoner layer with lighter upper pre-reasoning layers below it",
+      "env": {
+        "UPPER_ATTN_PLAN": "single_final_reasoner"
+      }
+    }
+  ]
+}

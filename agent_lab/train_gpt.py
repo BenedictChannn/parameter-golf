@@ -12,6 +12,7 @@ import io
 import math
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -89,6 +90,15 @@ class Hyperparameters:
     factor_attn_rank = int(os.environ.get("FACTOR_ATTN_RANK", 0))
     factor_mlp_rank = int(os.environ.get("FACTOR_MLP_RANK", 0))
     mlp_mode = os.environ.get("MLP_MODE", "relu2")
+    mlp_structure = os.environ.get("MLP_STRUCTURE", "dense")
+    mlp_light_layers = os.environ.get("MLP_LIGHT_LAYERS", "")
+    mlp_full_layers = os.environ.get("MLP_FULL_LAYERS", "")
+    mlp_light_structure = os.environ.get("MLP_LIGHT_STRUCTURE", "no_expand_quad")
+    block_mode = os.environ.get("BLOCK_MODE", "default")
+    block_types = os.environ.get("BLOCK_TYPES", "")
+    share_block_groups = os.environ.get("SHARE_BLOCK_GROUPS", "")
+    upper_attn_plan = os.environ.get("UPPER_ATTN_PLAN", "")
+    attnres_plan = os.environ.get("ATTNRES_PLAN", "")
     output_head_mode = os.environ.get("OUTPUT_HEAD_MODE", "auto")
     output_head_rank = int(os.environ.get("OUTPUT_HEAD_RANK", 64))
     output_head_bottleneck = int(os.environ.get("OUTPUT_HEAD_BOTTLENECK", 256))
@@ -768,44 +778,72 @@ class AttnResidualLite(nn.Module):
 
 class MLP(nn.Module):
     # Default is relu^2 from the original modded-nanogpt setup.
-    def __init__(self, dim: int, mlp_mult: int, mode: str = "relu2", factor_rank: int = 0):
+    def __init__(
+        self,
+        dim: int,
+        mlp_mult: int,
+        mode: str = "relu2",
+        factor_rank: int = 0,
+        structure: str = "dense",
+    ):
         super().__init__()
-        hidden = mlp_mult * dim
         self.mode = mode
-        self.hidden = hidden
-        fc_out = hidden * 2 if mode == "glu_silu" else hidden
-        self.fc = make_linear(dim, fc_out, factor_rank, bias=False)
-        self.proj = make_linear(hidden, dim, factor_rank, bias=False)
-        self.proj._zero_init = True
+        self.structure = structure
+        self.hidden = mlp_mult * dim
+        self.fc = None
+        self.proj = None
+        self.direct = None
+        self.quad_proj = None
+        if structure == "dense":
+            fc_out = self.hidden * 2 if mode == "glu_silu" else self.hidden
+            self.fc = make_linear(dim, fc_out, factor_rank, bias=False)
+            self.proj = make_linear(self.hidden, dim, factor_rank, bias=False)
+            self.proj._zero_init = True
+        elif structure == "no_expand_quad":
+            self.direct = CastedLinear(dim, dim, bias=False)
+            self.direct._zero_init = True
+        elif structure == "no_expand_linear_quad":
+            self.direct = CastedLinear(dim, dim, bias=False)
+            self.quad_proj = CastedLinear(dim, dim, bias=False)
+            self.direct._zero_init = True
+            self.quad_proj._zero_init = True
+        else:
+            raise ValueError(f"unsupported mlp_structure: {structure}")
+
+    def _activate(self, h: Tensor) -> Tensor:
+        if self.mode == "relu2":
+            return torch.relu(h).square()
+        if self.mode == "relu":
+            return torch.relu(h)
+        if self.mode == "silu":
+            return F.silu(h)
+        if self.mode == "gelu":
+            return F.gelu(h)
+        if self.mode == "glu_silu":
+            gate, value = h.chunk(2, dim=-1)
+            return F.silu(gate) * value
+        if self.mode == "relu3":
+            h = torch.relu(h)
+            return h * h * h
+        if self.mode == "relu_linear_quad":
+            h = torch.relu(h)
+            return h + 0.5 * h.square()
+        if self.mode == "relu2_cubic":
+            h = torch.relu(h)
+            return h.square() + 0.25 * (h * h * h)
+        if self.mode == "norm_square":
+            h = F.rms_norm(h, (h.size(-1),))
+            return h.square()
+        raise ValueError(f"unsupported mlp_mode: {self.mode}")
 
     def forward(self, x: Tensor) -> Tensor:
-        h = self.fc(x)
-        if self.mode == "relu2":
-            h = torch.relu(h).square()
-        elif self.mode == "relu":
-            h = torch.relu(h)
-        elif self.mode == "silu":
-            h = F.silu(h)
-        elif self.mode == "gelu":
-            h = F.gelu(h)
-        elif self.mode == "glu_silu":
-            gate, value = h.chunk(2, dim=-1)
-            h = F.silu(gate) * value
-        elif self.mode == "relu3":
-            h = torch.relu(h)
-            h = h * h * h
-        elif self.mode == "relu_linear_quad":
-            h = torch.relu(h)
-            h = h + 0.5 * h.square()
-        elif self.mode == "relu2_cubic":
-            h = torch.relu(h)
-            h = h.square() + 0.25 * (h * h * h)
-        elif self.mode == "norm_square":
-            h = F.rms_norm(h, (h.size(-1),))
-            h = h.square()
-        else:
-            raise ValueError(f"unsupported mlp_mode: {self.mode}")
-        return self.proj(h)
+        if self.structure == "dense":
+            return self.proj(self._activate(self.fc(x)))
+        h = torch.relu(F.rms_norm(x, (x.size(-1),)))
+        quad = h.square()
+        if self.structure == "no_expand_quad":
+            return self.direct(quad)
+        return self.direct(h) + self.quad_proj(quad)
 
 
 class OutputHead(nn.Module):
@@ -888,6 +926,8 @@ class Block(nn.Module):
         factor_attn_rank: int,
         factor_mlp_rank: int,
         mlp_mode: str,
+        mlp_structure: str,
+        disable_mlp: bool,
     ):
         super().__init__()
         self.attn_norm = RMSNorm()
@@ -904,7 +944,7 @@ class Block(nn.Module):
             dim, num_heads, num_kv_heads, rope_base, qk_gain_init, attn_latent_kv_dim, attn_local_window, factor_attn_rank
         )
         self.mixer = CausalSequenceMixer(dim, mixer_dim, mixer_kernel) if self.use_mixer else None
-        self.mlp = MLP(dim, mlp_mult, mlp_mode, factor_mlp_rank)
+        self.mlp = None if disable_mlp else MLP(dim, mlp_mult, mlp_mode, factor_mlp_rank, mlp_structure)
         if use_attn_scale:
             attn_scale_shape = dim if resid_scale_mode == "channel" else 1
             self.attn_scale = nn.Parameter(torch.ones(attn_scale_shape, dtype=torch.float32))
@@ -943,11 +983,12 @@ class Block(nn.Module):
             x = x + attn_out
         else:
             x = x + _broadcast_param_scale(self.attn_scale, x) * attn_out
-        mlp_out = self.mlp(self.mlp_norm(x))
-        if self.mlp_scale is None:
-            x = x + mlp_out
-        else:
-            x = x + _broadcast_param_scale(self.mlp_scale, x) * mlp_out
+        if self.mlp is not None:
+            mlp_out = self.mlp(self.mlp_norm(x))
+            if self.mlp_scale is None:
+                x = x + mlp_out
+            else:
+                x = x + _broadcast_param_scale(self.mlp_scale, x) * mlp_out
         return x
 
 
@@ -985,6 +1026,13 @@ class GPT(nn.Module):
         factor_attn_rank: int,
         factor_mlp_rank: int,
         mlp_mode: str,
+        mlp_structure: str,
+        mlp_light_layers: set[int],
+        mlp_full_layers: set[int],
+        mlp_light_structure: str,
+        block_mode: str,
+        block_types: list[str],
+        share_block_groups: list[list[int]],
         output_head_mode: str,
         output_head_rank: int,
         output_head_bottleneck: int,
@@ -1015,6 +1063,8 @@ class GPT(nn.Module):
             raise ValueError(
                 f"output_head_bottleneck must be positive for mode {output_head_mode}, got {output_head_bottleneck}"
             )
+        if block_mode not in {"default", "custom"}:
+            raise ValueError(f"block_mode must be default|custom, got {block_mode}")
         self.tie_embeddings = tie_embeddings
         self.tied_embed_init_std = tied_embed_init_std
         self.logit_softcap = logit_softcap
@@ -1032,14 +1082,85 @@ class GPT(nn.Module):
             if self.skip_mode == "shared_scalar"
             else None
         )
-        self.blocks = nn.ModuleList(
-            [
-                Block(
-                    i,
+        if len(block_types) != num_layers:
+            raise ValueError(f"BLOCK_TYPES must have {num_layers} entries, got {len(block_types)}")
+        self.block_types = list(block_types)
+        self.share_layer_aliases: dict[int, int] = {}
+        seen_shared_layers: set[int] = set()
+        for group in share_block_groups:
+            if len(set(group)) != len(group):
+                raise ValueError(f"SHARE_BLOCK_GROUPS group has duplicate layers: {group}")
+            overlap = seen_shared_layers.intersection(group)
+            if overlap:
+                raise ValueError(f"SHARE_BLOCK_GROUPS layers overlap across groups: {sorted(overlap)}")
+            seen_shared_layers.update(group)
+            canonical = min(group)
+            canonical_spec = (
+                canonical in mixer_layers,
+                canonical in attnres_layers,
+                canonical in latent_kv_layers,
+                canonical in local_attn_layers,
+                self.block_types[canonical],
+                *resolve_layer_mlp_plan(
+                    canonical,
+                    mlp_mult,
+                    mlp_structure,
+                    mlp_light_structure,
+                    mlp_light_layers,
+                    mlp_full_layers,
+                    self.block_types[canonical],
+                ),
+            )
+            for layer_idx in group:
+                layer_spec = (
+                    layer_idx in mixer_layers,
+                    layer_idx in attnres_layers,
+                    layer_idx in latent_kv_layers,
+                    layer_idx in local_attn_layers,
+                    self.block_types[layer_idx],
+                    *resolve_layer_mlp_plan(
+                        layer_idx,
+                        mlp_mult,
+                        mlp_structure,
+                        mlp_light_structure,
+                        mlp_light_layers,
+                        mlp_full_layers,
+                        self.block_types[layer_idx],
+                    ),
+                )
+                if layer_spec != canonical_spec:
+                    raise ValueError(
+                        f"Shared block layers must have identical specs; canonical {canonical} != layer {layer_idx}"
+                    )
+                if layer_idx != canonical:
+                    self.share_layer_aliases[layer_idx] = canonical
+        self.share_layer_gains = nn.ParameterDict(
+            {
+                f"layer_{layer_idx}": nn.Parameter(torch.ones(1, dtype=torch.float32))
+                for layer_idx in sorted(self.share_layer_aliases)
+            }
+        )
+
+        created_blocks: dict[int, Block] = {}
+        blocks: list[Block] = []
+        for i in range(num_layers):
+            canonical = self.share_layer_aliases.get(i, i)
+            if canonical not in created_blocks:
+                disable_mlp, layer_mlp_mult, layer_mlp_structure = resolve_layer_mlp_plan(
+                    canonical,
+                    mlp_mult,
+                    mlp_structure,
+                    mlp_light_structure,
+                    mlp_light_layers,
+                    mlp_full_layers,
+                    self.block_types[canonical],
+                )
+                created_blocks[canonical] = Block(
+                    canonical,
                     model_dim,
                     num_heads,
                     num_kv_heads,
-                    mlp_mult,
+                    layer_mlp_mult,
                     rope_base,
                     qk_gain_init,
                     use_resid_mix,
@@ -1060,10 +1181,11 @@ class GPT(nn.Module):
                     factor_attn_rank,
                     factor_mlp_rank,
                     mlp_mode,
+                    layer_mlp_structure,
+                    disable_mlp,
                 )
-                for i in range(num_layers)
-            ]
-        )
+            blocks.append(created_blocks[canonical])
+        self.blocks = nn.ModuleList(blocks)
         self.final_norm = RMSNorm()
         self.output_head = OutputHead(
             self.output_head_mode,
@@ -1106,7 +1228,12 @@ class GPT(nn.Module):
         for i in range(self.num_encoder_layers):
             qd = lora.q_loras[i] if lora else None
             vd = lora.v_loras[i] if lora else None
+            prev_x = x
             x = self.blocks[i](x, x0, qd, vd)
+            gain_name = f"layer_{i}"
+            if gain_name in self.share_layer_gains:
+                gain = self.share_layer_gains[gain_name]
+                x = prev_x + _broadcast_param_scale(gain, prev_x) * (x - prev_x)
             encoder_outputs.append(x)
         for i in range(self.num_decoder_layers):
             bi = self.num_encoder_layers + i
@@ -1125,7 +1252,12 @@ class GPT(nn.Module):
             qd = lora.q_loras[bi] if lora else None
             vd = lora.v_loras[bi] if lora else None
             attnres_candidates = make_attnres_candidates(x, skip) if self.blocks[bi].attnres is not None else None
+            prev_x = x
             x = self.blocks[bi](x, x0, qd, vd, attnres_candidates=attnres_candidates)
+            gain_name = f"layer_{bi}"
+            if gain_name in self.share_layer_gains:
+                gain = self.share_layer_gains[gain_name]
+                x = prev_x + _broadcast_param_scale(gain, prev_x) * (x - prev_x)
         x = self.final_norm(x)
         logits = self.output_head(x, self.tok_emb.weight)
         logits = logits + (lora.lm_head_lora(x) if lora else 0)
@@ -1139,6 +1271,27 @@ class GPT(nn.Module):
     def output_head_parameters(self) -> list[nn.Parameter]:
         return [p for p in self.output_head.parameters() if p.requires_grad]
 
+    def state_dict(self, *args, **kwargs):
+        state = super().state_dict(*args, **kwargs)
+        for alias_layer, canonical_layer in self.share_layer_aliases.items():
+            alias_prefix = f"blocks.{alias_layer}."
+            canonical_prefix = f"blocks.{canonical_layer}."
+            for key in [name for name in state if name.startswith(alias_prefix)]:
+                canonical_key = canonical_prefix + key[len(alias_prefix):]
+                if canonical_key in state:
+                    state.pop(key)
+        return state
+
+    def load_state_dict(self, state_dict, strict: bool = True, assign: bool = False):
+        expanded_state = dict(state_dict)
+        for alias_layer, canonical_layer in self.share_layer_aliases.items():
+            alias_prefix = f"blocks.{alias_layer}."
+            canonical_prefix = f"blocks.{canonical_layer}."
+            for key, value in list(expanded_state.items()):
+                if key.startswith(canonical_prefix):
+                    expanded_state.setdefault(alias_prefix + key[len(canonical_prefix):], value)
+        return super().load_state_dict(expanded_state, strict=strict, assign=assign)
+
 
 def parse_layer_index_set(spec: str, num_layers: int, label: str) -> set[int]:
     layers: set[int] = set()
@@ -1148,6 +1301,125 @@ def parse_layer_index_set(spec: str, num_layers: int, label: str) -> set[int]:
         if bad:
             raise ValueError(f"{label} layer indices out of range for num_layers={num_layers}: {bad}")
     return layers
+
+
+def parse_layer_groups(spec: str, num_layers: int, label: str) -> list[list[int]]:
+    groups: list[list[int]] = []
+    if not spec.strip():
+        return groups
+    for raw_group in spec.split("|"):
+        raw_group = raw_group.strip()
+        if not raw_group:
+            continue
+        group = sorted(parse_layer_index_set(raw_group, num_layers, label))
+        if len(group) < 2:
+            raise ValueError(f"{label} group must contain at least 2 layers, got {group}")
+        groups.append(group)
+    return groups
+
+
+def parse_block_types(spec: str, num_layers: int) -> list[str]:
+    if not spec.strip():
+        return ["standard"] * num_layers
+    types = [part.strip() for part in spec.split(",") if part.strip()]
+    if len(types) != num_layers:
+        raise ValueError(f"BLOCK_TYPES must have {num_layers} entries, got {len(types)}")
+    return types
+
+
+def resolve_upper_attn_plan(
+    num_layers: int,
+    mixer_layers: set[int],
+    upper_attn_plan: str,
+) -> set[int]:
+    if not upper_attn_plan:
+        return set(mixer_layers)
+    upper_layers = [idx for idx in range(num_layers) if idx not in mixer_layers]
+    if len(upper_layers) < 2:
+        return set(mixer_layers)
+    next_mixer_layers = set(mixer_layers)
+    if upper_attn_plan == "top3_global":
+        keep = set(upper_layers[-3:])
+        next_mixer_layers |= {idx for idx in upper_layers if idx not in keep}
+    elif upper_attn_plan == "top2_global":
+        keep = set(upper_layers[-2:])
+        next_mixer_layers |= {idx for idx in upper_layers if idx not in keep}
+    elif upper_attn_plan == "interleaved":
+        keep = set(upper_layers[::2])
+        next_mixer_layers |= {idx for idx in upper_layers if idx not in keep}
+    elif upper_attn_plan == "single_final_reasoner":
+        keep = {upper_layers[-1]}
+        next_mixer_layers |= {idx for idx in upper_layers if idx not in keep}
+    else:
+        raise ValueError(
+            "UPPER_ATTN_PLAN must be one of none|top3_global|top2_global|interleaved|single_final_reasoner"
+        )
+    return next_mixer_layers
+
+
+def resolve_attnres_plan(
+    num_layers: int,
+    mixer_layers: set[int],
+    attnres_layers: set[int],
+    attnres_num_sources: int,
+    attnres_routing_mode: str,
+    attnres_plan: str,
+) -> tuple[set[int], int, str]:
+    if not attnres_plan:
+        return set(attnres_layers), attnres_num_sources, attnres_routing_mode
+    top_attention_layers = [idx for idx in range(num_layers) if idx not in mixer_layers]
+    if attnres_plan == "top_only_two_source":
+        return set(top_attention_layers[-2:]), 2, "token_softmax"
+    if attnres_plan == "top_last_two_source":
+        return ({top_attention_layers[-1]} if top_attention_layers else set()), 2, "token_softmax"
+    raise ValueError("ATTNRES_PLAN must be one of none|top_only_two_source|top_last_two_source")
+
+
+def resolve_layer_mlp_plan(
+    layer_idx: int,
+    mlp_mult: int,
+    mlp_structure: str,
+    mlp_light_structure: str,
+    mlp_light_layers: set[int],
+    mlp_full_layers: set[int],
+    block_type: str,
+) -> tuple[bool, int, str]:
+    disable_mlp = False
+    layer_mlp_mult = mlp_mult
+    layer_mlp_structure = mlp_structure
+
+    if layer_mlp_structure not in {
+        "dense",
+        "no_expand_quad",
+        "no_expand_linear_quad",
+        "hybrid_lower_light",
+        "hybrid_top_full",
+    }:
+        raise ValueError(
+            "MLP_STRUCTURE must be one of dense|no_expand_quad|no_expand_linear_quad|hybrid_lower_light|hybrid_top_full"
+        )
+
+    if layer_mlp_structure == "hybrid_lower_light":
+        layer_mlp_structure = mlp_light_structure if layer_idx in mlp_light_layers else "dense"
+    elif layer_mlp_structure == "hybrid_top_full":
+        layer_mlp_structure = "dense" if layer_idx in mlp_full_layers else mlp_light_structure
+
+    if block_type == "mixer_only":
+        disable_mlp = True
+    elif block_type == "mixer_light":
+        layer_mlp_structure = mlp_light_structure
+        layer_mlp_mult = max(1, mlp_mult // 2)
+    elif block_type == "light":
+        layer_mlp_mult = max(1, mlp_mult // 2)
+    elif block_type == "heavy":
+        layer_mlp_structure = "dense"
+        layer_mlp_mult = max(mlp_mult + 1, 3)
+    elif block_type != "standard":
+        raise ValueError(f"unsupported block type: {block_type}")
+
+    if layer_mlp_structure not in {"dense", "no_expand_quad", "no_expand_linear_quad"}:
+        raise ValueError(f"unsupported resolved mlp_structure: {layer_mlp_structure}")
+    return disable_mlp, layer_mlp_mult, layer_mlp_structure
 
 
 def resolve_routing_modes(args: Hyperparameters) -> tuple[str, str]:
@@ -1167,6 +1439,9 @@ def build_optimizers(args: Hyperparameters, base_model: GPT) -> tuple[list[torch
     # - matrix params in transformer blocks use Muon and can be split by subsystem/depth
     # - vectors/scalars use Adam and can be split by subsystem/depth
     block_named_params = list(base_model.blocks.named_parameters())
+    block_named_params.extend(
+        (f"share_layer_gains.{name}", param) for name, param in base_model.share_layer_gains.named_parameters()
+    )
     num_encoder_layers = base_model.num_encoder_layers
 
     def adam_with_optional_fused(param_groups: list[dict]) -> torch.optim.Adam:
@@ -1177,8 +1452,8 @@ def build_optimizers(args: Hyperparameters, base_model: GPT) -> tuple[list[torch
         return torch.optim.Adam(param_groups, **kwargs)
 
     def block_layer_idx(name: str) -> int | None:
-        prefix = name.split(".", 1)[0]
-        return int(prefix) if prefix.isdigit() else None
+        match = re.search(r"(\d+)", name)
+        return int(match.group(1)) if match else None
 
     def depth_scale_for(layer_idx: int | None) -> float:
         if layer_idx is None:
@@ -1593,6 +1868,19 @@ def main() -> None:
     latent_kv_layers = parse_layer_index_set(args.latent_kv_layers, args.num_layers, "latent kv")
     local_attn_layers = parse_layer_index_set(args.local_attn_layers, args.num_layers, "local attention")
     mixer_layers = parse_layer_index_set(args.mixer_layers, args.num_layers, "mixer")
+    mixer_layers = resolve_upper_attn_plan(args.num_layers, mixer_layers, args.upper_attn_plan)
+    attnres_layers, attnres_num_sources, attnres_routing_mode = resolve_attnres_plan(
+        args.num_layers,
+        mixer_layers,
+        attnres_layers,
+        args.attnres_num_sources,
+        args.attnres_routing_mode,
+        args.attnres_plan,
+    )
+    block_types = parse_block_types(args.block_types, args.num_layers)
+    share_block_groups = parse_layer_groups(args.share_block_groups, args.num_layers, "share blocks")
+    mlp_light_layers = parse_layer_index_set(args.mlp_light_layers, args.num_layers, "mlp light")
+    mlp_full_layers = parse_layer_index_set(args.mlp_full_layers, args.num_layers, "mlp full")
     resid_mix_mode, resid_scale_mode = resolve_routing_modes(args)
 
     if not args.tokenizer_path.endswith(".model"):
@@ -1636,8 +1924,8 @@ def main() -> None:
         skip_mode=args.skip_mode,
         skip_link_pattern=args.skip_link_pattern,
         attnres_layers=attnres_layers,
-        attnres_num_sources=args.attnres_num_sources,
-        attnres_routing_mode=args.attnres_routing_mode,
+        attnres_num_sources=attnres_num_sources,
+        attnres_routing_mode=attnres_routing_mode,
         latent_kv_layers=latent_kv_layers,
         latent_kv_dim=args.latent_kv_dim,
         local_attn_layers=local_attn_layers,
@@ -1648,6 +1936,13 @@ def main() -> None:
         factor_attn_rank=args.factor_attn_rank,
         factor_mlp_rank=args.factor_mlp_rank,
         mlp_mode=args.mlp_mode,
+        mlp_structure=args.mlp_structure,
+        mlp_light_layers=mlp_light_layers,
+        mlp_full_layers=mlp_full_layers,
+        mlp_light_structure=args.mlp_light_structure,
+        block_mode=args.block_mode,
+        block_types=block_types,
+        share_block_groups=share_block_groups,
         output_head_mode=args.output_head_mode,
         output_head_rank=args.output_head_rank,
         output_head_bottleneck=args.output_head_bottleneck,
@@ -1668,7 +1963,10 @@ def main() -> None:
     n_params = sum(p.numel() for p in base_model.parameters())
     log0(f"model_params:{n_params}")
     log0(f"world_size:{world_size} grad_accum_steps:{grad_accum_steps}")
-    log0("sdp_backends:cudnn=False flash=True mem_efficient=False math=False")
+    log0(
+        f"sdp_backends:cudnn=False flash=True mem_efficient=False "
+        f"math={bool(local_attn_layers)}"
+    )
     log0(f"attention_mode:gqa num_heads:{args.num_heads} num_kv_heads:{args.num_kv_heads}")
     log0(
         f"tie_embeddings:{args.tie_embeddings} embed_lr:{token_lr} "
@@ -1685,7 +1983,7 @@ def main() -> None:
     )
     log0(
         f"attnres:layers={','.join(str(i) for i in sorted(attnres_layers)) if attnres_layers else 'none'} "
-        f"num_sources:{args.attnres_num_sources} routing_mode:{args.attnres_routing_mode}"
+        f"num_sources:{attnres_num_sources} routing_mode:{attnres_routing_mode} plan:{args.attnres_plan or 'none'}"
     )
     log0(
         f"latent_kv:layers={','.join(str(i) for i in sorted(latent_kv_layers)) if latent_kv_layers else 'none'} "
@@ -1697,9 +1995,21 @@ def main() -> None:
     )
     log0(
         f"sequence_mixer:layers={','.join(str(i) for i in sorted(mixer_layers)) if mixer_layers else 'none'} "
-        f"mixer_dim:{args.mixer_dim} mixer_kernel:{args.mixer_kernel}"
+        f"mixer_dim:{args.mixer_dim} mixer_kernel:{args.mixer_kernel} upper_plan:{args.upper_attn_plan or 'none'}"
     )
-    log0(f"factorization:attn_rank={args.factor_attn_rank} mlp_rank={args.factor_mlp_rank} mlp_mode:{args.mlp_mode}")
+    log0(
+        f"factorization:attn_rank={args.factor_attn_rank} mlp_rank={args.factor_mlp_rank} "
+        f"mlp_mode:{args.mlp_mode} mlp_structure:{args.mlp_structure}"
+    )
+    log0(
+        f"mlp_layer_plan:light_layers={','.join(str(i) for i in sorted(mlp_light_layers)) if mlp_light_layers else 'none'} "
+        f"full_layers={','.join(str(i) for i in sorted(mlp_full_layers)) if mlp_full_layers else 'none'} "
+        f"light_structure:{args.mlp_light_structure}"
+    )
+    log0(
+        f"block_plan:mode={args.block_mode} block_types={','.join(block_types)} "
+        f"share_groups={args.share_block_groups or 'none'}"
+    )
     log0(
         f"output_head:mode={base_model.output_head_mode} rank={args.output_head_rank} "
         f"bottleneck={args.output_head_bottleneck}"

@@ -50,12 +50,19 @@ This is the first-read dashboard for the current research state. Use this for th
 - If compression-native architecture is still important, what should replace naive low-rank factorization as the first serious branch?
 - Should the next MLP follow-up focus only on the two live survivors: gated MLPs under tighter size control and mixed linear-plus-quadratic polynomial forms?
 
-## Next Planned Runs
+## Next Runnable Queue
 
-- next tranche candidate: refine the `AL-20260331-017` winner rather than leaving the new frontier half-mapped
-- next tranche candidate: a narrow follow-up on top-only dynamic routing, only if it is justified as a real complement to shared skip gates
-- next tranche candidate: a second-generation compression-native branch that is not just low-rank factorization
-- later backlog: deeper MLP follow-up around gated SiLU under size control and `relu + quadratic` structured variants
+- [`T-20260401-Y`](./tranche_manifests/20260401-Y-mlp-structure-minimalism.json): question whether the dense expand-project MLP is structurally overbuilt
+- [`T-20260401-Z`](./tranche_manifests/20260401-Z-block-uniformity-audit.json): question whether every block really needs both token mixing and an FFN
+- [`T-20260401-AB`](./tranche_manifests/20260401-AB-compression-native-sharing.json): question whether weight sharing beats naive low-rank compression as the next compression-native branch
+- [`T-20260401-AA`](./tranche_manifests/20260401-AA-upper-attention-decomposition.json): question how much full global attention the upper stack actually still needs
+- top-level chain: [`P-20260401-YZABAA`](./program_manifests/20260401-YZABAA.json)
+
+## Later Backlog
+
+- revisit the `AL-20260331-017` winner only after the new architecture questions land cleanly
+- narrow top-only routing follow-up only if it still looks complementary after `AA`
+- later MLP follow-up around gated SiLU under tighter size control and `relu + quadratic` variants
 
 ## Go Deeper
 
