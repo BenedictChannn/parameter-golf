@@ -16,6 +16,20 @@ Work like a scientist, not only a tuner.
 - **Boldness:** be willing to try original ideas, not only known recipes. A failed branch that teaches you something real is still progress.
 - **Evidence:** negative results belong in the log. Confusion is data.
 
+## Research framing questions
+
+Use this checklist before tranche design and again during tranche closeout:
+
+- Where is the model wasting parameters?
+- Where is it wasting compute?
+- Where is it wasting memory?
+- Where is it most fragile under quantization?
+- Which parts want dynamic routing instead of fixed routing?
+- Which parts need full global context, and which do not?
+- Which parts are helping training but not the compressed submitted model?
+
+These questions should shape the next tranche. They are especially useful when local tuning starts to feel shallow, when a family has plateaued, or when a result is ambiguous and needs a deeper mechanistic read.
+
 ## Before changing code
 
 1. Read **`agent_lab/program.md`** (hard constraints).

@@ -81,8 +81,14 @@ class Hyperparameters:
     local_attn_layers = os.environ.get("LOCAL_ATTN_LAYERS", "")
     local_attn_window = int(os.environ.get("LOCAL_ATTN_WINDOW", 0))
     mixer_layers = os.environ.get("MIXER_LAYERS", "")
+    attnres_layers = os.environ.get("ATTNRES_LAYERS", "")
+    attnres_num_sources = int(os.environ.get("ATTNRES_NUM_SOURCES", 0))
+    attnres_routing_mode = os.environ.get("ATTNRES_ROUTING_MODE", "token_softmax")
     mixer_dim = int(os.environ.get("MIXER_DIM", 256))
     mixer_kernel = int(os.environ.get("MIXER_KERNEL", 4))
+    factor_attn_rank = int(os.environ.get("FACTOR_ATTN_RANK", 0))
+    factor_mlp_rank = int(os.environ.get("FACTOR_MLP_RANK", 0))
+    mlp_mode = os.environ.get("MLP_MODE", "relu2")
     output_head_mode = os.environ.get("OUTPUT_HEAD_MODE", "auto")
     output_head_rank = int(os.environ.get("OUTPUT_HEAD_RANK", 64))
     output_head_bottleneck = int(os.environ.get("OUTPUT_HEAD_BOTTLENECK", 256))
@@ -548,6 +554,37 @@ class CastedLinear(nn.Linear):
         return F.linear(x, self.weight.to(x.dtype), bias)
 
 
+class FactorizedLinear(nn.Module):
+    def __init__(self, in_features: int, out_features: int, rank: int, bias: bool = False):
+        super().__init__()
+        if rank <= 0 or rank >= min(in_features, out_features):
+            raise ValueError(
+                f"factor rank must be in [1, {min(in_features, out_features) - 1}], got {rank}"
+            )
+        self.in_features = in_features
+        self.out_features = out_features
+        self.rank = rank
+        self.down = CastedLinear(in_features, rank, bias=False)
+        self.up = CastedLinear(rank, out_features, bias=bias)
+
+    @property
+    def weight(self) -> Tensor:
+        return self.up.weight @ self.down.weight
+
+    @property
+    def bias(self) -> Tensor | None:
+        return self.up.bias
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.up(self.down(x))
+
+
+def make_linear(in_features: int, out_features: int, factor_rank: int = 0, bias: bool = False) -> nn.Module:
+    if factor_rank > 0:
+        return FactorizedLinear(in_features, out_features, factor_rank, bias=bias)
+    return CastedLinear(in_features, out_features, bias=bias)
+
+
 def _broadcast_param_scale(scale: Tensor, ref: Tensor) -> Tensor:
     if scale.ndim == 0 or scale.numel() == 1:
         return scale.to(dtype=ref.dtype).reshape(1, 1, 1)
@@ -612,6 +649,7 @@ class CausalSelfAttention(nn.Module):
         qk_gain_init: float,
         latent_kv_dim: int = 0,
         local_window: int = 0,
+        factor_rank: int = 0,
     ):
         super().__init__()
         if dim % num_heads != 0:
@@ -626,16 +664,16 @@ class CausalSelfAttention(nn.Module):
         kv_dim = self.num_kv_heads * self.head_dim
         self.use_latent_kv = latent_kv_dim > 0
         self.local_window = local_window
-        self.c_q = CastedLinear(dim, dim, bias=False)
+        self.c_q = make_linear(dim, dim, factor_rank, bias=False)
         if self.use_latent_kv:
-            self.c_kv_latent = CastedLinear(dim, latent_kv_dim, bias=False)
-            self.c_k = CastedLinear(latent_kv_dim, kv_dim, bias=False)
-            self.c_v = CastedLinear(latent_kv_dim, kv_dim, bias=False)
+            self.c_kv_latent = make_linear(dim, latent_kv_dim, factor_rank, bias=False)
+            self.c_k = make_linear(latent_kv_dim, kv_dim, factor_rank, bias=False)
+            self.c_v = make_linear(latent_kv_dim, kv_dim, factor_rank, bias=False)
         else:
             self.c_kv_latent = None
-            self.c_k = CastedLinear(dim, kv_dim, bias=False)
-            self.c_v = CastedLinear(dim, kv_dim, bias=False)
-        self.proj = CastedLinear(dim, dim, bias=False)
+            self.c_k = make_linear(dim, kv_dim, factor_rank, bias=False)
+            self.c_v = make_linear(dim, kv_dim, factor_rank, bias=False)
+        self.proj = make_linear(dim, dim, factor_rank, bias=False)
         self.proj._zero_init = True
         self.q_gain = nn.Parameter(torch.full((num_heads,), qk_gain_init, dtype=torch.float32))
         self.rotary = Rotary(self.head_dim, base=rope_base)
@@ -702,18 +740,72 @@ class CausalSequenceMixer(nn.Module):
         return self.out_proj(y)
 
 
+class AttnResidualLite(nn.Module):
+    def __init__(self, dim: int, max_sources: int, routing_mode: str):
+        super().__init__()
+        if max_sources < 2:
+            raise ValueError(f"attnres_num_sources must be >= 2, got {max_sources}")
+        if routing_mode not in {"token_softmax", "shared_scalar"}:
+            raise ValueError(f"attnres_routing_mode must be token_softmax|shared_scalar, got {routing_mode}")
+        self.max_sources = max_sources
+        self.routing_mode = routing_mode
+        self.router = CastedLinear(dim, max_sources, bias=False)
+
+    def forward(self, x: Tensor, candidates: list[Tensor]) -> Tensor:
+        if not candidates:
+            return x
+        num_sources = min(len(candidates), self.max_sources)
+        if num_sources == 1:
+            return candidates[0]
+        h = F.rms_norm(x, (x.size(-1),))
+        logits = self.router(h)[..., :num_sources]
+        if self.routing_mode == "shared_scalar":
+            logits = logits.mean(dim=1, keepdim=True)
+        weights = logits.softmax(dim=-1)
+        stacked = torch.stack(candidates[:num_sources], dim=-2)
+        return (weights.unsqueeze(-1) * stacked).sum(dim=-2)
+
+
 class MLP(nn.Module):
-    # relu^2 MLP from the original modded-nanogpt setup
-    def __init__(self, dim: int, mlp_mult: int):
+    # Default is relu^2 from the original modded-nanogpt setup.
+    def __init__(self, dim: int, mlp_mult: int, mode: str = "relu2", factor_rank: int = 0):
         super().__init__()
         hidden = mlp_mult * dim
-        self.fc = CastedLinear(dim, hidden, bias=False)
-        self.proj = CastedLinear(hidden, dim, bias=False)
+        self.mode = mode
+        self.hidden = hidden
+        fc_out = hidden * 2 if mode == "glu_silu" else hidden
+        self.fc = make_linear(dim, fc_out, factor_rank, bias=False)
+        self.proj = make_linear(hidden, dim, factor_rank, bias=False)
         self.proj._zero_init = True
 
     def forward(self, x: Tensor) -> Tensor:
-        x = torch.relu(self.fc(x))
-        return self.proj(x.square())
+        h = self.fc(x)
+        if self.mode == "relu2":
+            h = torch.relu(h).square()
+        elif self.mode == "relu":
+            h = torch.relu(h)
+        elif self.mode == "silu":
+            h = F.silu(h)
+        elif self.mode == "gelu":
+            h = F.gelu(h)
+        elif self.mode == "glu_silu":
+            gate, value = h.chunk(2, dim=-1)
+            h = F.silu(gate) * value
+        elif self.mode == "relu3":
+            h = torch.relu(h)
+            h = h * h * h
+        elif self.mode == "relu_linear_quad":
+            h = torch.relu(h)
+            h = h + 0.5 * h.square()
+        elif self.mode == "relu2_cubic":
+            h = torch.relu(h)
+            h = h.square() + 0.25 * (h * h * h)
+        elif self.mode == "norm_square":
+            h = F.rms_norm(h, (h.size(-1),))
+            h = h.square()
+        else:
+            raise ValueError(f"unsupported mlp_mode: {self.mode}")
+        return self.proj(h)
 
 
 class OutputHead(nn.Module):
@@ -783,6 +875,9 @@ class Block(nn.Module):
         use_mlp_scale: bool,
         resid_mix_mode: str,
         resid_scale_mode: str,
+        attnres_layers: set[int],
+        attnres_num_sources: int,
+        attnres_routing_mode: str,
         latent_kv_layers: set[int],
         latent_kv_dim: int,
         local_attn_layers: set[int],
@@ -790,18 +885,26 @@ class Block(nn.Module):
         mixer_layers: set[int],
         mixer_dim: int,
         mixer_kernel: int,
+        factor_attn_rank: int,
+        factor_mlp_rank: int,
+        mlp_mode: str,
     ):
         super().__init__()
         self.attn_norm = RMSNorm()
         self.mlp_norm = RMSNorm()
         self.use_mixer = layer_idx in mixer_layers
+        self.attnres = (
+            AttnResidualLite(dim, attnres_num_sources, attnres_routing_mode)
+            if layer_idx in attnres_layers and attnres_num_sources > 0
+            else None
+        )
         attn_latent_kv_dim = latent_kv_dim if layer_idx in latent_kv_layers and not self.use_mixer else 0
         attn_local_window = local_attn_window if layer_idx in local_attn_layers and not self.use_mixer else 0
         self.attn = None if self.use_mixer else CausalSelfAttention(
-            dim, num_heads, num_kv_heads, rope_base, qk_gain_init, attn_latent_kv_dim, attn_local_window
+            dim, num_heads, num_kv_heads, rope_base, qk_gain_init, attn_latent_kv_dim, attn_local_window, factor_attn_rank
         )
         self.mixer = CausalSequenceMixer(dim, mixer_dim, mixer_kernel) if self.use_mixer else None
-        self.mlp = MLP(dim, mlp_mult)
+        self.mlp = MLP(dim, mlp_mult, mlp_mode, factor_mlp_rank)
         if use_attn_scale:
             attn_scale_shape = dim if resid_scale_mode == "channel" else 1
             self.attn_scale = nn.Parameter(torch.ones(attn_scale_shape, dtype=torch.float32))
@@ -820,7 +923,9 @@ class Block(nn.Module):
         else:
             self.resid_mix = None
 
-    def forward(self, x: Tensor, x0: Tensor, q_delta_fn=None, v_delta_fn=None) -> Tensor:
+    def forward(self, x: Tensor, x0: Tensor, q_delta_fn=None, v_delta_fn=None, attnres_candidates: list[Tensor] | None = None) -> Tensor:
+        if self.attnres is not None and attnres_candidates:
+            x = self.attnres(x, attnres_candidates)
         if self.resid_mix is not None:
             mix = self.resid_mix.to(dtype=x.dtype)
             if mix.ndim == 1:
@@ -867,6 +972,9 @@ class GPT(nn.Module):
         resid_scale_mode: str,
         skip_mode: str,
         skip_link_pattern: str,
+        attnres_layers: set[int],
+        attnres_num_sources: int,
+        attnres_routing_mode: str,
         latent_kv_layers: set[int],
         latent_kv_dim: int,
         local_attn_layers: set[int],
@@ -874,6 +982,9 @@ class GPT(nn.Module):
         mixer_layers: set[int],
         mixer_dim: int,
         mixer_kernel: int,
+        factor_attn_rank: int,
+        factor_mlp_rank: int,
+        mlp_mode: str,
         output_head_mode: str,
         output_head_rank: int,
         output_head_bottleneck: int,
@@ -889,8 +1000,15 @@ class GPT(nn.Module):
             raise ValueError(f"resid_mix_mode must be off|scalar|channel, got {resid_mix_mode}")
         if resid_scale_mode not in {"off", "shared_scalar", "channel"}:
             raise ValueError(f"resid_scale_mode must be off|shared_scalar|channel, got {resid_scale_mode}")
+        if attnres_routing_mode not in {"token_softmax", "shared_scalar"}:
+            raise ValueError(f"attnres_routing_mode must be token_softmax|shared_scalar, got {attnres_routing_mode}")
         if local_attn_window < 0:
             raise ValueError(f"local_attn_window must be >= 0, got {local_attn_window}")
+        supported_mlp_modes = {
+            "relu2", "relu", "silu", "gelu", "glu_silu", "relu3", "relu_linear_quad", "relu2_cubic", "norm_square"
+        }
+        if mlp_mode not in supported_mlp_modes:
+            raise ValueError(f"unsupported mlp_mode: {mlp_mode}")
         if output_head_mode in {"low_rank", "tied_residual"} and output_head_rank <= 0:
             raise ValueError(f"output_head_rank must be positive for mode {output_head_mode}, got {output_head_rank}")
         if output_head_mode in {"bottleneck", "two_stage"} and output_head_bottleneck <= 0:
@@ -929,6 +1047,9 @@ class GPT(nn.Module):
                     use_mlp_scale,
                     resid_mix_mode,
                     resid_scale_mode,
+                    attnres_layers,
+                    attnres_num_sources,
+                    attnres_routing_mode,
                     latent_kv_layers,
                     latent_kv_dim,
                     local_attn_layers,
@@ -936,6 +1057,9 @@ class GPT(nn.Module):
                     mixer_layers,
                     mixer_dim,
                     mixer_kernel,
+                    factor_attn_rank,
+                    factor_mlp_rank,
+                    mlp_mode,
                 )
                 for i in range(num_layers)
             ]
@@ -956,34 +1080,52 @@ class GPT(nn.Module):
         for module in self.modules():
             if isinstance(module, nn.Linear) and getattr(module, "_zero_init", False):
                 nn.init.zeros_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            if isinstance(module, FactorizedLinear) and getattr(module, "_zero_init", False):
+                nn.init.zeros_(module.up.weight)
+                if module.up.bias is not None:
+                    nn.init.zeros_(module.up.bias)
 
     def forward(self, input_ids: Tensor, target_ids: Tensor, lora=None) -> Tensor:
         x = self.tok_emb(input_ids)
         x = F.rms_norm(x, (x.size(-1),))
         x0 = x
-        skips: list[Tensor] = []
+        encoder_outputs: list[Tensor] = []
+
+        def make_attnres_candidates(current_x: Tensor, matched_skip: Tensor | None) -> list[Tensor]:
+            candidates = [current_x]
+            if matched_skip is not None:
+                candidates.append(matched_skip)
+            if encoder_outputs:
+                candidates.append(encoder_outputs[0])
+            candidates.append(x0)
+            return candidates
 
         # First half stores skips; second half reuses them in reverse order.
         for i in range(self.num_encoder_layers):
             qd = lora.q_loras[i] if lora else None
             vd = lora.v_loras[i] if lora else None
             x = self.blocks[i](x, x0, qd, vd)
-            skips.append(x)
+            encoder_outputs.append(x)
         for i in range(self.num_decoder_layers):
             bi = self.num_encoder_layers + i
-            if skips:
-                skip = skips.pop()
+            skip = None
+            if i < self.num_skip_weights and encoder_outputs:
+                skip = encoder_outputs[self.num_encoder_layers - 1 - i]
                 if self.skip_link_pattern == "alternate" and i % 2 == 1:
                     skip = None
-                if self.skip_mode == "learned" and skip is not None:
-                    x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skip
-                elif self.skip_mode == "shared_scalar" and skip is not None:
-                    x = x + self.skip_weights[i].to(dtype=x.dtype).reshape(1, 1, 1) * skip
-                elif self.skip_mode == "unit" and skip is not None:
-                    x = x + skip
+                if self.blocks[bi].attnres is None:
+                    if self.skip_mode == "learned" and skip is not None:
+                        x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skip
+                    elif self.skip_mode == "shared_scalar" and skip is not None:
+                        x = x + self.skip_weights[i].to(dtype=x.dtype).reshape(1, 1, 1) * skip
+                    elif self.skip_mode == "unit" and skip is not None:
+                        x = x + skip
             qd = lora.q_loras[bi] if lora else None
             vd = lora.v_loras[bi] if lora else None
-            x = self.blocks[bi](x, x0, qd, vd)
+            attnres_candidates = make_attnres_candidates(x, skip) if self.blocks[bi].attnres is not None else None
+            x = self.blocks[bi](x, x0, qd, vd, attnres_candidates=attnres_candidates)
         x = self.final_norm(x)
         logits = self.output_head(x, self.tok_emb.weight)
         logits = logits + (lora.lm_head_lora(x) if lora else 0)
@@ -1044,7 +1186,7 @@ def build_optimizers(args: Hyperparameters, base_model: GPT) -> tuple[list[torch
         return args.early_layer_lr_scale if layer_idx < num_encoder_layers else args.late_layer_lr_scale
 
     def mech_scale_for(name: str) -> float:
-        if any(token in name for token in ("c_kv_latent", "mixer", "local_window")):
+        if any(token in name for token in ("c_kv_latent", "mixer", "local_window", "attnres", "down.weight", "up.weight")):
             return args.new_mech_lr_scale
         return 1.0
 
@@ -1410,7 +1552,9 @@ def main() -> None:
     enable_cudnn_sdp(False)
     enable_flash_sdp(True)
     enable_mem_efficient_sdp(False)
-    enable_math_sdp(False)
+    # Local-window attention uses an explicit mask; flash-only SDP rejects that path.
+    # Keep math SDP available when any local-attention layers are active.
+    enable_math_sdp(bool(os.environ.get("LOCAL_ATTN_LAYERS", "").strip()))
 
     logfile = None
     if master_process:
@@ -1445,6 +1589,7 @@ def main() -> None:
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
+    attnres_layers = parse_layer_index_set(args.attnres_layers, args.num_layers, "attnres")
     latent_kv_layers = parse_layer_index_set(args.latent_kv_layers, args.num_layers, "latent kv")
     local_attn_layers = parse_layer_index_set(args.local_attn_layers, args.num_layers, "local attention")
     mixer_layers = parse_layer_index_set(args.mixer_layers, args.num_layers, "mixer")
@@ -1490,6 +1635,9 @@ def main() -> None:
         resid_scale_mode=resid_scale_mode,
         skip_mode=args.skip_mode,
         skip_link_pattern=args.skip_link_pattern,
+        attnres_layers=attnres_layers,
+        attnres_num_sources=args.attnres_num_sources,
+        attnres_routing_mode=args.attnres_routing_mode,
         latent_kv_layers=latent_kv_layers,
         latent_kv_dim=args.latent_kv_dim,
         local_attn_layers=local_attn_layers,
@@ -1497,6 +1645,9 @@ def main() -> None:
         mixer_layers=mixer_layers,
         mixer_dim=args.mixer_dim,
         mixer_kernel=args.mixer_kernel,
+        factor_attn_rank=args.factor_attn_rank,
+        factor_mlp_rank=args.factor_mlp_rank,
+        mlp_mode=args.mlp_mode,
         output_head_mode=args.output_head_mode,
         output_head_rank=args.output_head_rank,
         output_head_bottleneck=args.output_head_bottleneck,
@@ -1533,6 +1684,10 @@ def main() -> None:
         f"skip_link_pattern={args.skip_link_pattern}"
     )
     log0(
+        f"attnres:layers={','.join(str(i) for i in sorted(attnres_layers)) if attnres_layers else 'none'} "
+        f"num_sources:{args.attnres_num_sources} routing_mode:{args.attnres_routing_mode}"
+    )
+    log0(
         f"latent_kv:layers={','.join(str(i) for i in sorted(latent_kv_layers)) if latent_kv_layers else 'none'} "
         f"latent_kv_dim:{args.latent_kv_dim}"
     )
@@ -1544,6 +1699,7 @@ def main() -> None:
         f"sequence_mixer:layers={','.join(str(i) for i in sorted(mixer_layers)) if mixer_layers else 'none'} "
         f"mixer_dim:{args.mixer_dim} mixer_kernel:{args.mixer_kernel}"
     )
+    log0(f"factorization:attn_rank={args.factor_attn_rank} mlp_rank={args.factor_mlp_rank} mlp_mode:{args.mlp_mode}")
     log0(
         f"output_head:mode={base_model.output_head_mode} rank={args.output_head_rank} "
         f"bottleneck={args.output_head_bottleneck}"

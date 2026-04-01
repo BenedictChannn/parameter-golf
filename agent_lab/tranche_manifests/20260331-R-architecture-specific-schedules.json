@@ -1,0 +1,103 @@
+{
+  "tranche_id": "T-20260331-R",
+  "title": "Architecture-Specific Schedules",
+  "research_question": "Does the current hybrid-mixer frontier want a different training tail, especially near quantization and export, than the old baseline schedule?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260330-104",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "256",
+    "MIXER_KERNEL": "4"
+  },
+  "candidates": [
+    {
+      "name": "r1-mild-warmdown",
+      "exp_id": "AL-20260331-011",
+      "goal": "Test whether the hybrid winner wants a slightly gentler global tail.",
+      "hypothesis": "A short mild warmdown may leave the compressed model in a better final state without freezing learning too early.",
+      "what_it_teaches": "Whether the winner wants any global tail change at all.",
+      "why_worthy": "This is the cleanest first schedule probe on the new best architecture.",
+      "description": "add a short mild warmdown to the hybrid winner",
+      "env": {
+        "WARMDOWN_FRACTION": "0.05",
+        "FINAL_LR_SCALE": "0.3"
+      }
+    },
+    {
+      "name": "r2-longer-warmdown",
+      "exp_id": "AL-20260331-012",
+      "goal": "Test whether the hybrid winner wants a much calmer finish.",
+      "hypothesis": "The new backbone may be more quantization-sensitive than the old baseline and may benefit from a longer tail.",
+      "what_it_teaches": "Whether the global-tail question is directional or not.",
+      "why_worthy": "This brackets R1 instead of assuming one warmdown level.",
+      "description": "add a longer warmdown to the hybrid winner",
+      "env": {
+        "WARMDOWN_FRACTION": "0.10",
+        "FINAL_LR_SCALE": "0.3"
+      }
+    },
+    {
+      "name": "r3-final-stabilize",
+      "exp_id": "AL-20260331-013",
+      "goal": "Test whether a brief export-focused cooldown is better than a broad warmdown.",
+      "hypothesis": "The right intervention may be a short stabilization phase near the end rather than a colder tail over many steps.",
+      "what_it_teaches": "Whether final settling helps independently of warmdown.",
+      "why_worthy": "This isolates stabilization from broad schedule changes.",
+      "description": "add only a short final stabilization phase",
+      "env": {
+        "FINAL_STABILIZE_STEPS": "100",
+        "FINAL_STABILIZE_LR_SCALE": "0.1"
+      }
+    },
+    {
+      "name": "r4-head-focused-cooldown",
+      "exp_id": "AL-20260331-014",
+      "goal": "Test whether the output path remains the fragile part even on the new hybrid frontier.",
+      "hypothesis": "The compressed model may improve if the head cools differently from the backbone near the end.",
+      "what_it_teaches": "Whether the quantization-sensitive surface is still mostly in the output path.",
+      "why_worthy": "Earlier quantization results hinted this was the only near-miss schedule direction.",
+      "description": "cool the head differently from the backbone at the end",
+      "env": {
+        "FINAL_STABILIZE_STEPS": "100",
+        "FINAL_STABILIZE_LR_SCALE": "0.1",
+        "FINAL_HEAD_LR_SCALE": "1.5",
+        "FINAL_BACKBONE_LR_SCALE": "0.5"
+      }
+    },
+    {
+      "name": "r5-mild-tail-plus-head-cooldown",
+      "exp_id": "AL-20260331-015",
+      "goal": "Test the strongest justified schedule combo on the new architecture.",
+      "hypothesis": "The best tail may need both a mild global decay and extra control over the output path.",
+      "what_it_teaches": "Whether the useful schedule effect is additive or singular.",
+      "why_worthy": "This is the one schedule combo that follows directly from the single-factor bracket.",
+      "description": "combine a mild warmdown with head-focused final cooldown",
+      "env": {
+        "WARMDOWN_FRACTION": "0.05",
+        "FINAL_LR_SCALE": "0.3",
+        "FINAL_STABILIZE_STEPS": "100",
+        "FINAL_STABILIZE_LR_SCALE": "0.1",
+        "FINAL_HEAD_LR_SCALE": "1.5",
+        "FINAL_BACKBONE_LR_SCALE": "0.5"
+      }
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "tranche_id": "T-20260331-Q",
+  "title": "AttnRes-lite Dynamic Depth Routing",
+  "research_question": "If skip topology matters and routing redesign matters, should later layers dynamically choose which earlier layer states to reuse instead of relying on fixed routing?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260330-104",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "256",
+    "MIXER_KERNEL": "4"
+  },
+  "notes": [
+    "This tranche now has code support. AttnRes-lite mixes a small set of earlier depth states instead of using full all-layer depth attention.",
+    "Current source order is current stream, matched encoder skip, shallow encoder anchor, then x0 if more sources are requested."
+  ],
+  "candidates": [
+    {
+      "name": "q1-late4-3source",
+      "exp_id": "AL-20260331-006",
+      "goal": "Test the cheapest viable dynamic depth-routing version.",
+      "hypothesis": "Even a tiny selector over the current stream, matched skip, and one shallow anchor layer can beat fixed routing.",
+      "what_it_teaches": "Whether the family is alive at all.",
+      "why_worthy": "This is the lowest-risk test of the whole idea.",
+      "description": "late-layer AttnRes-lite with three source states",
+      "env": {
+        "ATTNRES_LAYERS": "5,6,7,8",
+        "ATTNRES_NUM_SOURCES": "3",
+        "ATTNRES_ROUTING_MODE": "token_softmax"
+      }
+    },
+    {
+      "name": "q2-late4-4source",
+      "exp_id": "AL-20260331-007",
+      "goal": "Add one more earlier depth source to the same late-layer setup.",
+      "hypothesis": "One more earlier-layer candidate may improve routing quality enough to justify the extra complexity.",
+      "what_it_teaches": "Whether the family is source-limited.",
+      "why_worthy": "This is the cleanest bracket against Q1.",
+      "description": "late-layer AttnRes-lite with four source states",
+      "env": {
+        "ATTNRES_LAYERS": "5,6,7,8",
+        "ATTNRES_NUM_SOURCES": "4",
+        "ATTNRES_ROUTING_MODE": "token_softmax"
+      }
+    },
+    {
+      "name": "q3-top2-3source",
+      "exp_id": "AL-20260331-008",
+      "goal": "Test whether only the final refinement layers need dynamic depth routing.",
+      "hypothesis": "Most of the benefit may come at the top of the stack where the model chooses what depth information to expose to the output path.",
+      "what_it_teaches": "Whether the mechanism is placement-sensitive even within the upper stack.",
+      "why_worthy": "This keeps the family interpretable if the broad late-layer version loses.",
+      "description": "AttnRes-lite only on the top two layers with three source states",
+      "env": {
+        "ATTNRES_LAYERS": "7,8",
+        "ATTNRES_NUM_SOURCES": "3",
+        "ATTNRES_ROUTING_MODE": "token_softmax"
+      }
+    },
+    {
+      "name": "q4-late4-shared-routing",
+      "exp_id": "AL-20260331-009",
+      "goal": "Test a cheaper coarse routing version.",
+      "hypothesis": "The model may not need rich per-token depth attention; a shared or low-rank routing rule may be enough.",
+      "what_it_teaches": "Whether the family works only in an expensive form or also in a cheaper one.",
+      "why_worthy": "This guards against building an overcomplicated mechanism before the principle is proven.",
+      "description": "late-layer AttnRes-lite with cheaper shared routing",
+      "env": {
+        "ATTNRES_LAYERS": "5,6,7,8",
+        "ATTNRES_NUM_SOURCES": "3",
+        "ATTNRES_ROUTING_MODE": "shared_scalar"
+      }
+    },
+    {
+      "name": "q5-attnres-plus-cheap-routing",
+      "exp_id": "AL-20260331-010",
+      "goal": "Test whether dynamic routing stacks with the best fixed-routing redesign.",
+      "hypothesis": "Cheap fixed routing and dynamic depth routing may be complementary rather than redundant.",
+      "what_it_teaches": "Whether the family wants to live alone or inside a routing package.",
+      "why_worthy": "This is the one justified combo because the routing components likely interact strongly.",
+      "description": "late-layer AttnRes-lite on top of the cheap-routing package",
+      "env": {
+        "ATTNRES_LAYERS": "5,6,7,8",
+        "ATTNRES_NUM_SOURCES": "3",
+        "ATTNRES_ROUTING_MODE": "token_softmax",
+        "SKIP_MODE": "shared_scalar",
+        "RESID_MIX_MODE": "scalar",
+        "RESID_SCALE_MODE": "shared_scalar"
+      }
+    }
+  ]
+}

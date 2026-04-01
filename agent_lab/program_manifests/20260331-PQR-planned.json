@@ -1,0 +1,10 @@
+{
+  "program_id": "P-20260331-PQR",
+  "title": "Three Next-Step Architecture Tranches",
+  "description": "Plan for the next three bold tranches: hybrid mixer refinement, AttnRes-lite dynamic depth routing, and architecture-specific schedules.",
+  "tranches": [
+    "agent_lab/tranche_manifests/20260331-P-hybrid-mixer-refinement.json",
+    "agent_lab/tranche_manifests/20260331-Q-attnres-lite.json",
+    "agent_lab/tranche_manifests/20260331-R-architecture-specific-schedules.json"
+  ]
+}

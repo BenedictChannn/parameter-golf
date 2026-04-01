@@ -1,0 +1,94 @@
+{
+  "tranche_id": "T-20260331-P",
+  "title": "Hybrid Mixer Refinement",
+  "research_question": "The lower-four hybrid mixer model is the new frontier, but is that exact placement and mixer shape really optimal?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260330-104",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012",
+    "MIXER_DIM": "256",
+    "MIXER_KERNEL": "4"
+  },
+  "candidates": [
+    {
+      "name": "p1-lower3",
+      "exp_id": "AL-20260331-001",
+      "goal": "Test whether the current lower-four winner is over-replacing attention.",
+      "hypothesis": "Three lower mixers may preserve most of the gain while restoring some lost lower-stack attention expressivity.",
+      "what_it_teaches": "Whether the win is broad or narrowly tied to one exact placement.",
+      "why_worthy": "This is the cleanest first refinement of the current best run.",
+      "description": "replace the lower three attention layers with sequence mixers",
+      "env": {
+        "MIXER_LAYERS": "0,1,2"
+      }
+    },
+    {
+      "name": "p2-lower5",
+      "exp_id": "AL-20260331-002",
+      "goal": "Test whether the frontier wants even less lower-stack attention than the current winner uses.",
+      "hypothesis": "The lower stack may tolerate one more mixer layer than the current lower-four design.",
+      "what_it_teaches": "Whether the current winner is still too conservative.",
+      "why_worthy": "This extends the same architectural idea in the most direct way possible.",
+      "description": "replace the lower five attention layers with sequence mixers",
+      "env": {
+        "MIXER_LAYERS": "0,1,2,3,4"
+      }
+    },
+    {
+      "name": "p3-lower4-small-mixer",
+      "exp_id": "AL-20260331-003",
+      "goal": "Test whether the current mixer itself is larger than necessary.",
+      "hypothesis": "A smaller mixer may preserve quality while saving bytes and compute inside the winning placement.",
+      "what_it_teaches": "Whether the new mechanism is already overbuilt.",
+      "why_worthy": "This asks whether the frontier can get both better and cheaper at once.",
+      "description": "keep the winning lower-four placement but shrink mixer width",
+      "env": {
+        "MIXER_LAYERS": "0,1,2,3",
+        "MIXER_DIM": "192"
+      }
+    },
+    {
+      "name": "p4-lower4-large-mixer",
+      "exp_id": "AL-20260331-004",
+      "goal": "Test whether the current mixer width is underpowered.",
+      "hypothesis": "A richer mixer may exploit the lower-stack replacement idea better than the current width.",
+      "what_it_teaches": "Whether the winning mechanism is capacity-limited.",
+      "why_worthy": "If this wins, the frontier is still leaving mixer quality on the table.",
+      "description": "keep the winning lower-four placement but widen the mixer",
+      "env": {
+        "MIXER_LAYERS": "0,1,2,3",
+        "MIXER_DIM": "320"
+      }
+    },
+    {
+      "name": "p5-lower4-kernel6",
+      "exp_id": "AL-20260331-005",
+      "goal": "Test whether the lower-stack mixer wants a wider local receptive field.",
+      "hypothesis": "The current kernel may be too narrow, and a slightly broader local window may improve the trade against removed attention.",
+      "what_it_teaches": "Whether the mechanism needs more local context rather than more width.",
+      "why_worthy": "This probes the quality of the mixer itself, not just where it is placed.",
+      "description": "keep the winning lower-four placement but widen the mixer kernel",
+      "env": {
+        "MIXER_LAYERS": "0,1,2,3",
+        "MIXER_KERNEL": "6"
+      }
+    }
+  ]
+}
