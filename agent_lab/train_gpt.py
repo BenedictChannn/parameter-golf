@@ -950,7 +950,7 @@ class Block(nn.Module):
             self.attn_scale = nn.Parameter(torch.ones(attn_scale_shape, dtype=torch.float32))
         else:
             self.attn_scale = None
-        if use_mlp_scale:
+        if use_mlp_scale and not disable_mlp:
             mlp_scale_shape = dim if resid_scale_mode == "channel" else 1
             self.mlp_scale = nn.Parameter(torch.ones(mlp_scale_shape, dtype=torch.float32))
         else:
