@@ -1,0 +1,12 @@
+{
+  "program_id": "P-20260401-ZACADAE",
+  "title": "Repaired Z Plus Bold Unknown Branches",
+  "description": "Run the repaired block-uniformity tranche first, then the three bold unknown branches: token-selective compute, latent upper reasoning, and structured sharing with layer deltas.",
+  "implementation_status": "runnable",
+  "tranches": [
+    "agent_lab/tranche_manifests/20260401-Z-block-uniformity-audit.json",
+    "agent_lab/tranche_manifests/20260401-AC-conditional-heavy-light-compute.json",
+    "agent_lab/tranche_manifests/20260401-AD-latent-upper-reasoner.json",
+    "agent_lab/tranche_manifests/20260401-AE-structured-sharing-deltas.json"
+  ]
+}

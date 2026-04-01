@@ -65,6 +65,7 @@ This is the first-read dashboard for the current research state. Use this for th
 - rerun [`T-20260401-Z`](./tranche_manifests/20260401-Z-block-uniformity-audit.json) cleanly on the fixed mixer-only-block implementation
 - after `Z` is repaired, decide whether `AA4` deserves a focused follow-up branch around interleaved upper attention
 - after that, three new smoke-validated bold branches are ready: [`T-20260401-AC`](./tranche_manifests/20260401-AC-conditional-heavy-light-compute.json), [`T-20260401-AD`](./tranche_manifests/20260401-AD-latent-upper-reasoner.json), and [`T-20260401-AE`](./tranche_manifests/20260401-AE-structured-sharing-deltas.json)
+- combined runnable queue prepared at [`20260401-ZACADAE.json`](./program_manifests/20260401-ZACADAE.json)
 - keep the current frontier [`AL-20260331-017`](./experiments.tsv) as the main comparison anchor
 
 ## Later Backlog
