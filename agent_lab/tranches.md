@@ -1298,3 +1298,52 @@ How much full global attention does the upper stack still need, and is the very 
 - [`AL-20260401-059`](./experiments.tsv) was by far the best result and nearly tied the frontier, which makes interleaved upper attention the only live survivor
 - `AA1` was only a mild loss, but `AA2`, `AA3`, and `AA5` all failed clearly
 - current conclusion: the upper stack may be simplifiable by interleaving, but not by collapsing it to only one or two global reasoners
+
+### T-20260401-AC: Conditional Heavy Light Compute
+
+**Status:** runnable
+
+**Goal**  
+Test whether the model should spend full upper-stack attention and FFN compute only on routed important tokens.
+
+**Main question**  
+Is token-selective compute the next big efficiency frontier, rather than another uniform layer-wise simplification?
+
+**Implementation status**
+
+- implemented in [`train_gpt.py`](./train_gpt.py) via the `TOKEN_SELECTIVE_*` env family
+- supports FFN-only, attention-only, and joint heavy-token paths
+- supports learned and norm-based routing
+- smoke-validated across all five manifest candidates
+
+### T-20260401-AD: Latent Upper Reasoner
+
+**Status:** runnable
+
+**Goal**  
+Test whether the upper stack can preserve global reasoning quality while operating over a compact latent sequence.
+
+**Main question**  
+Can upper reasoning move off the full token stream and into a smaller latent workspace?
+
+**Implementation status**
+
+- implemented in [`train_gpt.py`](./train_gpt.py) via the `LATENT_REASONER_*` env family
+- supports pooled and learned latent-slot modes over selected upper layers
+- smoke-validated across all five manifest candidates
+
+### T-20260401-AE: Structured Sharing With Layer Deltas
+
+**Status:** runnable
+
+**Goal**  
+Test whether sub-block sharing plus small per-layer deltas beats the blunt compression-native stories that already failed.
+
+**Main question**  
+Can the model share structure across attention, mixer, or FFN submodules without giving up layer individuality?
+
+**Implementation status**
+
+- implemented in [`train_gpt.py`](./train_gpt.py) via the `SHARE_DELTA_*` env family
+- supports structured sharing for attention, mixer, and MLP submodules with low-rank output deltas
+- smoke-validated across all five manifest candidates, including state-dict dedupe checks

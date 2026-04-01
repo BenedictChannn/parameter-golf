@@ -64,6 +64,7 @@ This is the first-read dashboard for the current research state. Use this for th
 
 - rerun [`T-20260401-Z`](./tranche_manifests/20260401-Z-block-uniformity-audit.json) cleanly on the fixed mixer-only-block implementation
 - after `Z` is repaired, decide whether `AA4` deserves a focused follow-up branch around interleaved upper attention
+- after that, three new smoke-validated bold branches are ready: [`T-20260401-AC`](./tranche_manifests/20260401-AC-conditional-heavy-light-compute.json), [`T-20260401-AD`](./tranche_manifests/20260401-AD-latent-upper-reasoner.json), and [`T-20260401-AE`](./tranche_manifests/20260401-AE-structured-sharing-deltas.json)
 - keep the current frontier [`AL-20260331-017`](./experiments.tsv) as the main comparison anchor
 
 ## Later Backlog
@@ -71,6 +72,7 @@ This is the first-read dashboard for the current research state. Use this for th
 - revisit the `AL-20260331-017` winner only after the repaired `Z` tranche and any `AA4` follow-up land
 - narrow top-only routing follow-up only if it still looks complementary after the upper-attention story is clearer
 - later MLP follow-up around gated SiLU under tighter size control and `relu + quadratic` variants
+- full bold unknown-branch queue prepared at [`20260401-ACADAE.json`](./program_manifests/20260401-ACADAE.json)
 
 ## Go Deeper
 

@@ -1,0 +1,100 @@
+{
+  "tranche_id": "T-20260401-AE",
+  "title": "Structured Sharing With Layer Deltas",
+  "research_question": "Can cross-layer redundancy be exploited by sharing sub-block structure and restoring layer individuality with small learned deltas, instead of using blunt low-rank factorization or whole-block sharing?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-017",
+  "implementation_status": "runnable",
+  "implementation_notes": [
+    "Implemented via SHARE_DELTA_* env knobs that alias selected attention, mixer, or MLP submodules to a shared base and attach small low-rank per-layer output deltas.",
+    "The shared-submodule aliases are deduped in state_dict so artifact-size accounting stays honest.",
+    "This is meant to test structured sharing with preserved layer individuality, not blunt full-block sharing."
+  ],
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "SKIP_MODE": "shared_scalar",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012",
+    "SHARE_DELTA_RANK": "32"
+  },
+  "candidates": [
+    {
+      "name": "ae1-upper-attention-shared-base-plus-delta",
+      "exp_id": "AL-20260401-076",
+      "goal": "Test whether upper attention blocks reuse enough structure to share a base while keeping small per-layer corrections.",
+      "hypothesis": "Upper attention layers may contain shareable structure if each layer still gets a small learned delta.",
+      "what_it_teaches": "Whether attention redundancy exists at the sub-block level rather than the whole-block level.",
+      "why_worthy": "This is the direct successor to the failed whole-block-sharing idea and attacks the same gap with a more surgical mechanism.",
+      "description": "share upper attention bases in layer pairs and restore uniqueness with small deltas",
+      "env": {
+        "SHARE_DELTA_ATTN_GROUPS": "4,5|6,7"
+      }
+    },
+    {
+      "name": "ae2-lower-mixer-shared-base-plus-delta",
+      "exp_id": "AL-20260401-077",
+      "goal": "Test whether the lower structured-processing stage contains more shareable redundancy than the upper reasoning stage.",
+      "hypothesis": "Lower mixer blocks may be more repetitive and therefore better candidates for structured sharing.",
+      "what_it_teaches": "Whether the lower stack is the better target for compression-native sharing.",
+      "why_worthy": "This directly checks whether the shared-structure opportunity lives in the stage that already looks more overbuilt.",
+      "description": "share lower mixer bases in pairs and restore layer individuality with small deltas",
+      "env": {
+        "SHARE_DELTA_MIXER_GROUPS": "0,1|2,3"
+      }
+    },
+    {
+      "name": "ae3-upper-ffn-shared-base-plus-delta",
+      "exp_id": "AL-20260401-078",
+      "goal": "Test whether FFNs are the real redundancy source once layer-specific deltas are preserved.",
+      "hypothesis": "Upper FFNs may share a large common basis while still needing only small layer-specific corrections.",
+      "what_it_teaches": "Whether FFN sharing is more viable than attention sharing in this structured form.",
+      "why_worthy": "The FFN budget is large enough that even a partial win here would materially change the architecture story.",
+      "description": "share upper FFN bases in pairs and restore uniqueness with low-rank deltas",
+      "env": {
+        "SHARE_DELTA_MLP_GROUPS": "4,5|6,7"
+      }
+    },
+    {
+      "name": "ae4-broader-upper-attention-sharing",
+      "exp_id": "AL-20260401-079",
+      "goal": "Test whether a broader shared attention basis can work when deltas are still available.",
+      "hypothesis": "Attention redundancy may span more than layer pairs if small deltas preserve layer identity.",
+      "what_it_teaches": "Whether the useful sharing unit is very local or can stretch across a wider upper band.",
+      "why_worthy": "This is the bolder pressure test of the structured-sharing idea, not just the safest pairwise version.",
+      "description": "share a broader upper attention basis across the early upper band and keep small per-layer deltas",
+      "env": {
+        "SHARE_DELTA_ATTN_GROUPS": "4,5,6"
+      }
+    },
+    {
+      "name": "ae5-share-then-reinvest",
+      "exp_id": "AL-20260401-080",
+      "goal": "Test whether structured sharing only becomes useful when the saved bytes are reinvested into a stronger backbone component.",
+      "hypothesis": "Sharing may be a reallocation mechanism rather than a direct quality win by itself.",
+      "what_it_teaches": "Whether structured sharing should be judged as compression alone or as budget redeployment.",
+      "why_worthy": "This is the most strategic version of the branch because it asks what the saved capacity should actually buy us.",
+      "description": "share lower mixer bases with deltas and reinvest the savings into a wider lower mixer",
+      "env": {
+        "SHARE_DELTA_MIXER_GROUPS": "0,1|2,3",
+        "MIXER_DIM": "352"
+      }
+    }
+  ]
+}

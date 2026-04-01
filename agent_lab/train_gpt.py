@@ -97,8 +97,23 @@ class Hyperparameters:
     block_mode = os.environ.get("BLOCK_MODE", "default")
     block_types = os.environ.get("BLOCK_TYPES", "")
     share_block_groups = os.environ.get("SHARE_BLOCK_GROUPS", "")
+    share_delta_attn_groups = os.environ.get("SHARE_DELTA_ATTN_GROUPS", "")
+    share_delta_mlp_groups = os.environ.get("SHARE_DELTA_MLP_GROUPS", "")
+    share_delta_mixer_groups = os.environ.get("SHARE_DELTA_MIXER_GROUPS", "")
+    share_delta_rank = int(os.environ.get("SHARE_DELTA_RANK", 0))
     upper_attn_plan = os.environ.get("UPPER_ATTN_PLAN", "")
     attnres_plan = os.environ.get("ATTNRES_PLAN", "")
+    token_selective_layers = os.environ.get("TOKEN_SELECTIVE_LAYERS", "")
+    token_selective_topk_ratio = float(os.environ.get("TOKEN_SELECTIVE_TOPK_RATIO", 0.25))
+    token_selective_mode = os.environ.get("TOKEN_SELECTIVE_MODE", "none")
+    token_selective_router = os.environ.get("TOKEN_SELECTIVE_ROUTER", "learned")
+    token_selective_light_mlp_structure = os.environ.get("TOKEN_SELECTIVE_LIGHT_MLP_STRUCTURE", "no_expand_linear_quad")
+    token_selective_light_mlp_mult = int(os.environ.get("TOKEN_SELECTIVE_LIGHT_MLP_MULT", 1))
+    token_selective_light_attn_dim = int(os.environ.get("TOKEN_SELECTIVE_LIGHT_ATTN_DIM", 128))
+    token_selective_light_attn_kernel = int(os.environ.get("TOKEN_SELECTIVE_LIGHT_ATTN_KERNEL", 4))
+    latent_reasoner_layers = os.environ.get("LATENT_REASONER_LAYERS", "")
+    latent_reasoner_slots = int(os.environ.get("LATENT_REASONER_SLOTS", 0))
+    latent_reasoner_mode = os.environ.get("LATENT_REASONER_MODE", "pooled")
     output_head_mode = os.environ.get("OUTPUT_HEAD_MODE", "auto")
     output_head_rank = int(os.environ.get("OUTPUT_HEAD_RANK", 64))
     output_head_bottleneck = int(os.environ.get("OUTPUT_HEAD_BOTTLENECK", 256))
@@ -595,6 +610,21 @@ def make_linear(in_features: int, out_features: int, factor_rank: int = 0, bias:
     return CastedLinear(in_features, out_features, bias=bias)
 
 
+class LowRankDelta(nn.Module):
+    def __init__(self, in_features: int, out_features: int, rank: int):
+        super().__init__()
+        if rank <= 0 or rank >= min(in_features, out_features):
+            raise ValueError(
+                f"delta rank must be in [1, {min(in_features, out_features) - 1}], got {rank}"
+            )
+        self.down = CastedLinear(in_features, rank, bias=False)
+        self.up = CastedLinear(rank, out_features, bias=False)
+        self.up._zero_init = True
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.up(self.down(x))
+
+
 def _broadcast_param_scale(scale: Tensor, ref: Tensor) -> Tensor:
     if scale.ndim == 0 or scale.numel() == 1:
         return scale.to(dtype=ref.dtype).reshape(1, 1, 1)
@@ -776,6 +806,67 @@ class AttnResidualLite(nn.Module):
         return (weights.unsqueeze(-1) * stacked).sum(dim=-2)
 
 
+class TokenSelectiveRouter(nn.Module):
+    def __init__(self, dim: int, topk_ratio: float, router_mode: str):
+        super().__init__()
+        if topk_ratio <= 0:
+            raise ValueError(f"token_selective_topk_ratio must be positive, got {topk_ratio}")
+        if router_mode not in {"learned", "norm"}:
+            raise ValueError(f"token_selective_router must be learned|norm, got {router_mode}")
+        self.topk_ratio = topk_ratio
+        self.router_mode = router_mode
+        self.router = CastedLinear(dim, 1, bias=False) if router_mode == "learned" else None
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.router is None:
+            scores = x.float().norm(dim=-1)
+        else:
+            h = F.rms_norm(x, (x.size(-1),))
+            scores = self.router(h).squeeze(-1).float()
+        bsz, seqlen = scores.shape
+        k = int(self.topk_ratio) if self.topk_ratio > 1.0 else math.ceil(seqlen * self.topk_ratio)
+        k = max(1, min(seqlen, k))
+        topk_idx = scores.topk(k, dim=-1, largest=True, sorted=False).indices
+        mask = torch.zeros_like(scores, dtype=x.dtype)
+        mask.scatter_(1, topk_idx, 1.0)
+        return mask.unsqueeze(-1)
+
+
+class LatentUpperReasoner(nn.Module):
+    def __init__(self, dim: int, num_heads: int, num_kv_heads: int, rope_base: float, qk_gain_init: float, num_slots: int, mode: str):
+        super().__init__()
+        if num_slots < 2:
+            raise ValueError(f"latent_reasoner_slots must be >= 2, got {num_slots}")
+        if mode not in {"pooled", "learned"}:
+            raise ValueError(f"latent_reasoner_mode must be pooled|learned, got {mode}")
+        self.num_slots = num_slots
+        self.mode = mode
+        self.latent_attn = CausalSelfAttention(dim, num_heads, num_kv_heads, rope_base, qk_gain_init)
+        self.out_proj = CastedLinear(dim, dim, bias=False)
+        self.out_proj._zero_init = True
+        self.slot_embed = nn.Parameter(torch.zeros(num_slots, dim, dtype=torch.float32)) if mode == "learned" else None
+        if self.slot_embed is not None:
+            nn.init.normal_(self.slot_embed, mean=0.0, std=0.02)
+
+    def forward(self, x: Tensor) -> Tensor:
+        bsz, seqlen, dim = x.shape
+        stride = max(1, math.ceil(seqlen / self.num_slots))
+        chunks = []
+        for start in range(0, seqlen, stride):
+            chunk = x[:, start : start + stride]
+            chunks.append(chunk.mean(dim=1))
+        latent = torch.stack(chunks, dim=1)
+        if self.slot_embed is not None:
+            latent = latent + self.slot_embed[: latent.size(1)].to(dtype=latent.dtype)[None, :, :]
+        latent = latent + self.latent_attn(F.rms_norm(latent, (dim,)))
+        up = latent.repeat_interleave(stride, dim=1)[:, :seqlen, :]
+        if stride >= seqlen:
+            up = torch.zeros_like(up)
+        else:
+            up = torch.cat((torch.zeros_like(up[:, :stride]), up[:, :-stride]), dim=1)
+        return self.out_proj(up)
+
+
 class MLP(nn.Module):
     # Default is relu^2 from the original modded-nanogpt setup.
     def __init__(
@@ -928,11 +1019,24 @@ class Block(nn.Module):
         mlp_mode: str,
         mlp_structure: str,
         disable_mlp: bool,
+        token_selective_layers: set[int],
+        token_selective_topk_ratio: float,
+        token_selective_mode: str,
+        token_selective_router: str,
+        token_selective_light_mlp_structure: str,
+        token_selective_light_mlp_mult: int,
+        token_selective_light_attn_dim: int,
+        token_selective_light_attn_kernel: int,
+        latent_reasoner_layers: set[int],
+        latent_reasoner_slots: int,
+        latent_reasoner_mode: str,
     ):
         super().__init__()
+        self.dim = dim
         self.attn_norm = RMSNorm()
         self.mlp_norm = RMSNorm()
         self.use_mixer = layer_idx in mixer_layers
+        self.token_selective_mode = token_selective_mode
         self.attnres = (
             AttnResidualLite(dim, attnres_num_sources, attnres_routing_mode)
             if layer_idx in attnres_layers and attnres_num_sources > 0
@@ -944,7 +1048,39 @@ class Block(nn.Module):
             dim, num_heads, num_kv_heads, rope_base, qk_gain_init, attn_latent_kv_dim, attn_local_window, factor_attn_rank
         )
         self.mixer = CausalSequenceMixer(dim, mixer_dim, mixer_kernel) if self.use_mixer else None
+        self.latent_reasoner = (
+            LatentUpperReasoner(
+                dim,
+                num_heads,
+                num_kv_heads,
+                rope_base,
+                qk_gain_init,
+                latent_reasoner_slots,
+                latent_reasoner_mode,
+            )
+            if layer_idx in latent_reasoner_layers and not self.use_mixer and latent_reasoner_slots > 0
+            else None
+        )
+        token_selective_active = layer_idx in token_selective_layers and token_selective_mode != "none"
+        self.token_router = (
+            TokenSelectiveRouter(dim, token_selective_topk_ratio, token_selective_router)
+            if token_selective_active
+            else None
+        )
+        self.light_attn = (
+            CausalSequenceMixer(dim, token_selective_light_attn_dim, token_selective_light_attn_kernel)
+            if token_selective_active and token_selective_mode in {"attn", "joint"} and not self.use_mixer and self.latent_reasoner is None
+            else None
+        )
         self.mlp = None if disable_mlp else MLP(dim, mlp_mult, mlp_mode, factor_mlp_rank, mlp_structure)
+        self.light_mlp = (
+            MLP(dim, max(1, token_selective_light_mlp_mult), mlp_mode, 0, token_selective_light_mlp_structure)
+            if token_selective_active and token_selective_mode in {"ffn", "joint"} and not disable_mlp
+            else None
+        )
+        self.attn_delta = None
+        self.mlp_delta = None
+        self.mixer_delta = None
         if use_attn_scale:
             attn_scale_shape = dim if resid_scale_mode == "channel" else 1
             self.attn_scale = nn.Parameter(torch.ones(attn_scale_shape, dtype=torch.float32))
@@ -963,6 +1099,24 @@ class Block(nn.Module):
         else:
             self.resid_mix = None
 
+    def share_attention_base(self, shared_attn: nn.Module, rank: int) -> None:
+        if self.use_mixer or self.attn is None:
+            raise ValueError("attention sharing requires an attention block")
+        self.attn = shared_attn
+        self.attn_delta = LowRankDelta(self.dim, self.dim, rank)
+
+    def share_mixer_base(self, shared_mixer: nn.Module, rank: int) -> None:
+        if not self.use_mixer or self.mixer is None:
+            raise ValueError("mixer sharing requires a mixer block")
+        self.mixer = shared_mixer
+        self.mixer_delta = LowRankDelta(self.dim, self.dim, rank)
+
+    def share_mlp_base(self, shared_mlp: nn.Module, rank: int) -> None:
+        if self.mlp is None:
+            raise ValueError("mlp sharing requires an MLP-enabled block")
+        self.mlp = shared_mlp
+        self.mlp_delta = LowRankDelta(self.dim, self.dim, rank)
+
     def forward(self, x: Tensor, x0: Tensor, q_delta_fn=None, v_delta_fn=None, attnres_candidates: list[Tensor] | None = None) -> Tensor:
         if self.attnres is not None and attnres_candidates:
             x = self.attnres(x, attnres_candidates)
@@ -973,18 +1127,34 @@ class Block(nn.Module):
             else:
                 x = mix[0][None, None, :] * x + mix[1][None, None, :] * x0
         n = self.attn_norm(x)
+        route_mask = self.token_router(n) if self.token_router is not None else None
         if self.use_mixer:
             attn_out = self.mixer(n)
+            if self.mixer_delta is not None:
+                attn_out = attn_out + self.mixer_delta(n)
+        elif self.latent_reasoner is not None:
+            attn_out = self.latent_reasoner(n)
         else:
             qd = q_delta_fn(n) if q_delta_fn is not None else None
             vd = v_delta_fn(n) if v_delta_fn is not None else None
-            attn_out = self.attn(n, qd, vd)
+            if route_mask is not None and self.token_selective_mode in {"attn", "joint"} and self.light_attn is not None:
+                attn_out = self.light_attn(n) + route_mask * self.attn(n, qd, vd)
+            else:
+                attn_out = self.attn(n, qd, vd)
+            if self.attn_delta is not None:
+                attn_out = attn_out + self.attn_delta(n)
         if self.attn_scale is None:
             x = x + attn_out
         else:
             x = x + _broadcast_param_scale(self.attn_scale, x) * attn_out
         if self.mlp is not None:
-            mlp_out = self.mlp(self.mlp_norm(x))
+            h = self.mlp_norm(x)
+            if route_mask is not None and self.token_selective_mode in {"ffn", "joint"} and self.light_mlp is not None:
+                mlp_out = self.light_mlp(h) + route_mask * self.mlp(h)
+            else:
+                mlp_out = self.mlp(h)
+            if self.mlp_delta is not None:
+                mlp_out = mlp_out + self.mlp_delta(h)
             if self.mlp_scale is None:
                 x = x + mlp_out
             else:
@@ -1033,6 +1203,21 @@ class GPT(nn.Module):
         block_mode: str,
         block_types: list[str],
         share_block_groups: list[list[int]],
+        share_delta_attn_groups: list[list[int]],
+        share_delta_mlp_groups: list[list[int]],
+        share_delta_mixer_groups: list[list[int]],
+        share_delta_rank: int,
+        token_selective_layers: set[int],
+        token_selective_topk_ratio: float,
+        token_selective_mode: str,
+        token_selective_router: str,
+        token_selective_light_mlp_structure: str,
+        token_selective_light_mlp_mult: int,
+        token_selective_light_attn_dim: int,
+        token_selective_light_attn_kernel: int,
+        latent_reasoner_layers: set[int],
+        latent_reasoner_slots: int,
+        latent_reasoner_mode: str,
         output_head_mode: str,
         output_head_rank: int,
         output_head_bottleneck: int,
@@ -1065,6 +1250,14 @@ class GPT(nn.Module):
             )
         if block_mode not in {"default", "custom"}:
             raise ValueError(f"block_mode must be default|custom, got {block_mode}")
+        if token_selective_mode not in {"none", "ffn", "attn", "joint"}:
+            raise ValueError(f"token_selective_mode must be none|ffn|attn|joint, got {token_selective_mode}")
+        if token_selective_router not in {"learned", "norm"}:
+            raise ValueError(f"token_selective_router must be learned|norm, got {token_selective_router}")
+        if latent_reasoner_mode not in {"pooled", "learned"}:
+            raise ValueError(f"latent_reasoner_mode must be pooled|learned, got {latent_reasoner_mode}")
+        if share_delta_rank < 0:
+            raise ValueError(f"share_delta_rank must be >= 0, got {share_delta_rank}")
         self.tie_embeddings = tie_embeddings
         self.tied_embed_init_std = tied_embed_init_std
         self.logit_softcap = logit_softcap
@@ -1085,6 +1278,7 @@ class GPT(nn.Module):
         if len(block_types) != num_layers:
             raise ValueError(f"BLOCK_TYPES must have {num_layers} entries, got {len(block_types)}")
         self.block_types = list(block_types)
+        self.shared_submodule_aliases: dict[str, str] = {}
         self.share_layer_aliases: dict[int, int] = {}
         seen_shared_layers: set[int] = set()
         for group in share_block_groups:
@@ -1183,9 +1377,60 @@ class GPT(nn.Module):
                     mlp_mode,
                     layer_mlp_structure,
                     disable_mlp,
+                    token_selective_layers,
+                    token_selective_topk_ratio,
+                    token_selective_mode,
+                    token_selective_router,
+                    token_selective_light_mlp_structure,
+                    token_selective_light_mlp_mult,
+                    token_selective_light_attn_dim,
+                    token_selective_light_attn_kernel,
+                    latent_reasoner_layers,
+                    latent_reasoner_slots,
+                    latent_reasoner_mode,
                 )
             blocks.append(created_blocks[canonical])
         self.blocks = nn.ModuleList(blocks)
+
+        def attach_shared_delta(groups: list[list[int]], module_name: str) -> None:
+            if not groups:
+                return
+            if share_delta_rank <= 0:
+                raise ValueError(f"{module_name} delta sharing requires SHARE_DELTA_RANK > 0")
+            seen_layers: set[int] = set()
+            for group in groups:
+                overlap = seen_layers.intersection(group)
+                if overlap:
+                    raise ValueError(f"{module_name} delta sharing groups overlap: {sorted(overlap)}")
+                seen_layers.update(group)
+                canonical = min(group)
+                canonical_block = self.blocks[canonical]
+                if module_name == "attn":
+                    if canonical_block.use_mixer or canonical_block.attn is None:
+                        raise ValueError(f"attention delta sharing needs attention blocks, got layer {canonical}")
+                elif module_name == "mixer":
+                    if not canonical_block.use_mixer or canonical_block.mixer is None:
+                        raise ValueError(f"mixer delta sharing needs mixer blocks, got layer {canonical}")
+                elif module_name == "mlp":
+                    if canonical_block.mlp is None:
+                        raise ValueError(f"mlp delta sharing needs MLP-enabled blocks, got layer {canonical}")
+                else:
+                    raise ValueError(f"unsupported shared module: {module_name}")
+                for layer_idx in group:
+                    if layer_idx == canonical:
+                        continue
+                    block = self.blocks[layer_idx]
+                    if module_name == "attn":
+                        block.share_attention_base(canonical_block.attn, share_delta_rank)
+                    elif module_name == "mixer":
+                        block.share_mixer_base(canonical_block.mixer, share_delta_rank)
+                    else:
+                        block.share_mlp_base(canonical_block.mlp, share_delta_rank)
+                    self.shared_submodule_aliases[f"blocks.{layer_idx}.{module_name}."] = f"blocks.{canonical}.{module_name}."
+
+        attach_shared_delta(share_delta_attn_groups, "attn")
+        attach_shared_delta(share_delta_mlp_groups, "mlp")
+        attach_shared_delta(share_delta_mixer_groups, "mixer")
         self.final_norm = RMSNorm()
         self.output_head = OutputHead(
             self.output_head_mode,
@@ -1280,6 +1525,11 @@ class GPT(nn.Module):
                 canonical_key = canonical_prefix + key[len(alias_prefix):]
                 if canonical_key in state:
                     state.pop(key)
+        for alias_prefix, canonical_prefix in self.shared_submodule_aliases.items():
+            for key in [name for name in state if name.startswith(alias_prefix)]:
+                canonical_key = canonical_prefix + key[len(alias_prefix):]
+                if canonical_key in state:
+                    state.pop(key)
         return state
 
     def load_state_dict(self, state_dict, strict: bool = True, assign: bool = False):
@@ -1287,6 +1537,10 @@ class GPT(nn.Module):
         for alias_layer, canonical_layer in self.share_layer_aliases.items():
             alias_prefix = f"blocks.{alias_layer}."
             canonical_prefix = f"blocks.{canonical_layer}."
+            for key, value in list(expanded_state.items()):
+                if key.startswith(canonical_prefix):
+                    expanded_state.setdefault(alias_prefix + key[len(canonical_prefix):], value)
+        for alias_prefix, canonical_prefix in self.shared_submodule_aliases.items():
             for key, value in list(expanded_state.items()):
                 if key.startswith(canonical_prefix):
                     expanded_state.setdefault(alias_prefix + key[len(canonical_prefix):], value)
@@ -1461,7 +1715,22 @@ def build_optimizers(args: Hyperparameters, base_model: GPT) -> tuple[list[torch
         return args.early_layer_lr_scale if layer_idx < num_encoder_layers else args.late_layer_lr_scale
 
     def mech_scale_for(name: str) -> float:
-        if any(token in name for token in ("c_kv_latent", "mixer", "local_window", "attnres", "down.weight", "up.weight")):
+        if any(
+            token in name
+            for token in (
+                "c_kv_latent",
+                "mixer",
+                "local_window",
+                "attnres",
+                "latent_reasoner",
+                "token_router",
+                "light_attn",
+                "light_mlp",
+                "_delta",
+                "down.weight",
+                "up.weight",
+            )
+        ):
             return args.new_mech_lr_scale
         return 1.0
 
@@ -1868,6 +2137,8 @@ def main() -> None:
     latent_kv_layers = parse_layer_index_set(args.latent_kv_layers, args.num_layers, "latent kv")
     local_attn_layers = parse_layer_index_set(args.local_attn_layers, args.num_layers, "local attention")
     mixer_layers = parse_layer_index_set(args.mixer_layers, args.num_layers, "mixer")
+    latent_reasoner_layers = parse_layer_index_set(args.latent_reasoner_layers, args.num_layers, "latent reasoner")
+    token_selective_layers = parse_layer_index_set(args.token_selective_layers, args.num_layers, "token selective")
     mixer_layers = resolve_upper_attn_plan(args.num_layers, mixer_layers, args.upper_attn_plan)
     attnres_layers, attnres_num_sources, attnres_routing_mode = resolve_attnres_plan(
         args.num_layers,
@@ -1879,6 +2150,9 @@ def main() -> None:
     )
     block_types = parse_block_types(args.block_types, args.num_layers)
     share_block_groups = parse_layer_groups(args.share_block_groups, args.num_layers, "share blocks")
+    share_delta_attn_groups = parse_layer_groups(args.share_delta_attn_groups, args.num_layers, "share delta attn")
+    share_delta_mlp_groups = parse_layer_groups(args.share_delta_mlp_groups, args.num_layers, "share delta mlp")
+    share_delta_mixer_groups = parse_layer_groups(args.share_delta_mixer_groups, args.num_layers, "share delta mixer")
     mlp_light_layers = parse_layer_index_set(args.mlp_light_layers, args.num_layers, "mlp light")
     mlp_full_layers = parse_layer_index_set(args.mlp_full_layers, args.num_layers, "mlp full")
     resid_mix_mode, resid_scale_mode = resolve_routing_modes(args)
@@ -1943,6 +2217,21 @@ def main() -> None:
         block_mode=args.block_mode,
         block_types=block_types,
         share_block_groups=share_block_groups,
+        share_delta_attn_groups=share_delta_attn_groups,
+        share_delta_mlp_groups=share_delta_mlp_groups,
+        share_delta_mixer_groups=share_delta_mixer_groups,
+        share_delta_rank=args.share_delta_rank,
+        token_selective_layers=token_selective_layers,
+        token_selective_topk_ratio=args.token_selective_topk_ratio,
+        token_selective_mode=args.token_selective_mode,
+        token_selective_router=args.token_selective_router,
+        token_selective_light_mlp_structure=args.token_selective_light_mlp_structure,
+        token_selective_light_mlp_mult=args.token_selective_light_mlp_mult,
+        token_selective_light_attn_dim=args.token_selective_light_attn_dim,
+        token_selective_light_attn_kernel=args.token_selective_light_attn_kernel,
+        latent_reasoner_layers=latent_reasoner_layers,
+        latent_reasoner_slots=args.latent_reasoner_slots,
+        latent_reasoner_mode=args.latent_reasoner_mode,
         output_head_mode=args.output_head_mode,
         output_head_rank=args.output_head_rank,
         output_head_bottleneck=args.output_head_bottleneck,
@@ -1998,6 +2287,16 @@ def main() -> None:
         f"mixer_dim:{args.mixer_dim} mixer_kernel:{args.mixer_kernel} upper_plan:{args.upper_attn_plan or 'none'}"
     )
     log0(
+        f"token_selective:layers={','.join(str(i) for i in sorted(token_selective_layers)) if token_selective_layers else 'none'} "
+        f"mode:{args.token_selective_mode} router:{args.token_selective_router} topk:{args.token_selective_topk_ratio} "
+        f"light_mlp={args.token_selective_light_mlp_structure}/{args.token_selective_light_mlp_mult} "
+        f"light_attn={args.token_selective_light_attn_dim}xk{args.token_selective_light_attn_kernel}"
+    )
+    log0(
+        f"latent_reasoner:layers={','.join(str(i) for i in sorted(latent_reasoner_layers)) if latent_reasoner_layers else 'none'} "
+        f"slots:{args.latent_reasoner_slots} mode:{args.latent_reasoner_mode}"
+    )
+    log0(
         f"factorization:attn_rank={args.factor_attn_rank} mlp_rank={args.factor_mlp_rank} "
         f"mlp_mode:{args.mlp_mode} mlp_structure:{args.mlp_structure}"
     )
@@ -2009,6 +2308,11 @@ def main() -> None:
     log0(
         f"block_plan:mode={args.block_mode} block_types={','.join(block_types)} "
         f"share_groups={args.share_block_groups or 'none'}"
+    )
+    log0(
+        f"share_delta:attn={args.share_delta_attn_groups or 'none'} "
+        f"mlp={args.share_delta_mlp_groups or 'none'} mixer={args.share_delta_mixer_groups or 'none'} "
+        f"rank={args.share_delta_rank}"
     )
     log0(
         f"output_head:mode={base_model.output_head_mode} rank={args.output_head_rank} "

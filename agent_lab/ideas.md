@@ -537,6 +537,37 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - [`AL-20260401-059`](./experiments.tsv) was only `+0.0025` off the frontier and clearly beat the other AA variants.
 - [`AL-20260401-057`](./experiments.tsv), [`AL-20260401-058`](./experiments.tsv), and [`AL-20260401-060`](./experiments.tsv) show that collapsing the upper stack to one or two global reasoners is too aggressive.
 
+### I-20260401-011 - Conditional Heavy Light Compute
+
+- Category: architecture
+- Hypothesis: the model should not spend full upper-stack attention and FFN compute on every token; a routed minority may deserve the heavy path while everyone else follows a cheaper update.
+- Why it might work:
+- the strongest current simplification story is selective non-uniformity, not broad removal
+- FFNs are still important, but that does not imply every token deserves the same FFN budget
+- token-selective compute is one of the biggest unexplored axes in this repo
+- Manifest: [`20260401-AC-conditional-heavy-light-compute.json`](./tranche_manifests/20260401-AC-conditional-heavy-light-compute.json)
+- Status: active
+
+### I-20260401-012 - Latent Upper Reasoner
+
+- Category: architecture
+- Hypothesis: the upper stack may preserve most of its global reasoning quality if it reasons over a compact latent sequence instead of the full token stream at full width.
+- Why it might work:
+- the upper stack still needs repeated global refresh, but it may be over-dense in token space
+- a latent upper reasoner attacks compute and memory without just killing global context
+- Manifest: [`20260401-AD-latent-upper-reasoner.json`](./tranche_manifests/20260401-AD-latent-upper-reasoner.json)
+- Status: active
+
+### I-20260401-013 - Structured Sharing With Layer Deltas
+
+- Category: compression + architecture
+- Hypothesis: cross-layer redundancy may be exploitable only if sub-block structure is shared and layer identity is restored with small learned deltas, rather than by blunt low-rank factorization or whole-block sharing.
+- Why it might work:
+- both naive factorization and whole-block sharing already failed
+- the next compression-native branch likely needs selective shared structure, not total tying
+- Manifest: [`20260401-AE-structured-sharing-deltas.json`](./tranche_manifests/20260401-AE-structured-sharing-deltas.json)
+- Status: active
+
 ### Park
 
 ### I-20260401-004 - Plain Local-Window Attention On The Hybrid Backbone
