@@ -455,3 +455,42 @@ Use [`state.md`](./state.md) for the live dashboard, [`ideas.md`](./ideas.md) fo
 - the gains over the anchor are still small, so this is a later refinement path rather than a proven new frontier family.
 - Next falsification:
 - if polynomial MLPs are revisited, treat `relu + quadratic` as the anchor and ignore cubic-heavy forms unless a new theory justifies them.
+
+## F-20260401-037: The Current Frontier Still Needs Real Dense FFNs In Most Layers
+
+- Claim: broad removal or strong shrinking of the expand-project MLP structure is misaligned with the current hybrid frontier.
+- Confidence: high
+- Evidence:
+- [`AL-20260401-046`](./experiments.tsv) and [`AL-20260401-048`](./experiments.tsv) show that no-expand tokenwise MLP replacements collapse far away from the frontier.
+- [`AL-20260401-047`](./experiments.tsv) shows even halving dense FFN width loses clearly.
+- [`AL-20260401-050`](./experiments.tsv) shows keeping full MLPs only at the top is also too weak.
+- Counterevidence:
+- [`AL-20260401-049`](./experiments.tsv) stayed relatively close, which means some depth-specific MLP simplification may still be possible.
+- Next falsification:
+- if FFN structure is revisited, do not retry broad no-expand minimalism; only test lower-light or other narrow stage-specific simplifications.
+
+## F-20260401-038: Naive Cross-Layer Weight Sharing Is Not A Viable Compression-Native Win
+
+- Claim: the current hybrid backbone is not overparameterized in a way that simple block sharing can exploit cleanly.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260401-061`](./experiments.tsv) was the best sharing run, and it still lost clearly to the frontier.
+- [`AL-20260401-062`](./experiments.tsv) and [`AL-20260401-063`](./experiments.tsv) show that both lower-stage and top-stage sharing degrade quality materially.
+- [`AL-20260401-064`](./experiments.tsv) and [`AL-20260401-065`](./experiments.tsv) show that reinvesting the saved bytes does not rescue the sharing branch.
+- Counterevidence:
+- `AB1` was only modestly worse while saving bytes, so sharing is not catastrophic in the same way as naive low-rank MLP factorization.
+- Next falsification:
+- if compression-native design is revisited, move away from whole-block sharing and test mechanisms that preserve more layer individuality.
+
+## F-20260401-039: The Upper Stack Can Probably Be Simplified By Interleaving, Not By Collapsing
+
+- Claim: the remaining upper attention stack is still necessary, but a periodic global-refresh pattern may be a viable simplification path.
+- Confidence: medium
+- Evidence:
+- [`AL-20260401-059`](./experiments.tsv) at `1.3454` was only `+0.0025` off the frontier and dramatically better than the other AA variants.
+- [`AL-20260401-057`](./experiments.tsv) and [`AL-20260401-060`](./experiments.tsv) show that top-two-only and single-final-reasoner collapse the upper stack too aggressively.
+- [`AL-20260401-058`](./experiments.tsv) shows that adding top-only routing does not rescue an overly thinned upper-attention stack.
+- Counterevidence:
+- [`AL-20260401-059`](./experiments.tsv) still lost to the frontier, so interleaving is only a near-survivor, not a winner.
+- Next falsification:
+- if the upper-attention family is resumed, focus on interleaved or periodic-refresh designs, not further collapse to only one or two global layers.

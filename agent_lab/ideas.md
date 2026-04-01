@@ -494,7 +494,10 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - `relu^2` is strong, but we have only tested activation families, not whether the whole FFN structure is overbuilt
 - mixed linear-plus-quadratic behavior already showed one live hint
 - Manifest: [`20260401-Y-mlp-structure-minimalism.json`](./tranche_manifests/20260401-Y-mlp-structure-minimalism.json)
-- Status: active
+- Status: parked
+- Evidence so far:
+- [`AL-20260401-046`](./experiments.tsv), [`AL-20260401-047`](./experiments.tsv), [`AL-20260401-048`](./experiments.tsv), and [`AL-20260401-050`](./experiments.tsv) all lost clearly.
+- [`AL-20260401-049`](./experiments.tsv) was the only near-survivor, so any future revisit should focus only on lower-stack MLP lightening, not broad no-expand minimalism.
 
 ### I-20260401-008 - Block Uniformity Audit
 
@@ -515,7 +518,10 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - naive low-rank factorization already failed cleanly
 - the current frontier theory says lower and upper stages each perform repeated specialized jobs, which makes sharing plausible
 - Manifest: [`20260401-AB-compression-native-sharing.json`](./tranche_manifests/20260401-AB-compression-native-sharing.json)
-- Status: active
+- Status: parked
+- Evidence so far:
+- [`AL-20260401-061`](./experiments.tsv) was the best sharing run and still lost clearly to the frontier.
+- [`AL-20260401-062`](./experiments.tsv) through [`AL-20260401-065`](./experiments.tsv) show that broad sharing and share-to-reallocate variants did not recover the lost function.
 
 ### I-20260401-010 - Upper Attention Decomposition
 
@@ -527,6 +533,9 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - top-only routing being alive hints that the very top of the stack may be doing a distinct job
 - Manifest: [`20260401-AA-upper-attention-decomposition.json`](./tranche_manifests/20260401-AA-upper-attention-decomposition.json)
 - Status: active
+- Evidence so far:
+- [`AL-20260401-059`](./experiments.tsv) was only `+0.0025` off the frontier and clearly beat the other AA variants.
+- [`AL-20260401-057`](./experiments.tsv), [`AL-20260401-058`](./experiments.tsv), and [`AL-20260401-060`](./experiments.tsv) show that collapsing the upper stack to one or two global reasoners is too aggressive.
 
 ### Park
 

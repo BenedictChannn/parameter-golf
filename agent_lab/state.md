@@ -32,6 +32,13 @@ This is the first-read dashboard for the current research state. Use this for th
 - `W` kept the broad MLP family anchored on `relu^2`
 - `X` showed mixed linear-plus-quadratic MLP structure is the only polynomial variant still near the frontier
 
+## Latest Completed Architecture Families
+
+- `Y` MLP Structure Minimalism: completed
+- `AB` Compression-Native Sharing: completed
+- `AA` Upper Attention Decomposition: completed
+- `Z` Block Uniformity Audit: partially run; `Z1` crashed due to dead MLP-scale parameters on mixer-only blocks and needs a clean rerun on the fixed commit
+
 ## Working Beliefs
 
 - The frontier now wants a hybrid lower stack plus cleaner routing. Lower-four sequence mixers remain the right backbone, and shared scalar skip gates are the cleanest stacking win on top of it.
@@ -42,30 +49,32 @@ This is the first-read dashboard for the current research state. Use this for th
 - The MLP family is still anchored on `relu^2`. Plain ReLU, SiLU, and GELU all lost clearly on the current backbone.
 - The only broad-family MLP near-miss was gated SiLU, but it broke the size cap. That makes it a later capacity/compression question, not an immediate replacement.
 - Inside the polynomial family, cubic structure looks wrong. The only live hint is `relu + 0.5 * relu^2`, which stayed very close to the frontier without beating it.
+- Broad MLP-structure minimalism mostly failed. No-expand MLPs were decisively too weak, and even halving dense FFN width lost clearly. The only survivor was lightening the lower MLPs while keeping full upper MLPs, but it still remained clearly behind the frontier.
+- Naive stage-wise weight sharing is not the next compression-native win. Lower-two sharing was the least bad sharing run, but broad lower sharing, top-two attention sharing, and share-to-reallocate variants all lost cleanly.
+- The upper attention stack is not trivially removable, but it may be reducible by interleaving. The best AA run interleaving upper attention and lighter refinement blocks nearly tied the frontier, while top-two-only and single-final-reasoner plans failed badly.
 
 ## Open Questions
 
 - Does the `AL-20260331-017` winner still have local headroom in mixer width, kernel, or routing strength, or is this branch now mostly polished?
-- Is the narrow top-only dynamic routing line genuinely complementary to the skip-gate winner, or did [`AL-20260331-035`](./experiments.tsv) already capture most of that interaction?
-- If compression-native architecture is still important, what should replace naive low-rank factorization as the first serious branch?
+- Is interleaving upper attention and lighter refinement blocks a real simplification path, or was [`AL-20260401-059`](./experiments.tsv) only a near-miss?
+- If compression-native architecture is still important, what should replace both naive low-rank factorization and naive cross-layer weight sharing?
 - Should the next MLP follow-up focus only on the two live survivors: gated MLPs under tighter size control and mixed linear-plus-quadratic polynomial forms?
 
 ## Next Runnable Queue
 
-- [`T-20260401-Y`](./tranche_manifests/20260401-Y-mlp-structure-minimalism.json): question whether the dense expand-project MLP is structurally overbuilt
-- [`T-20260401-Z`](./tranche_manifests/20260401-Z-block-uniformity-audit.json): question whether every block really needs both token mixing and an FFN
-- [`T-20260401-AB`](./tranche_manifests/20260401-AB-compression-native-sharing.json): question whether weight sharing beats naive low-rank compression as the next compression-native branch
-- [`T-20260401-AA`](./tranche_manifests/20260401-AA-upper-attention-decomposition.json): question how much full global attention the upper stack actually still needs
-- top-level chain: [`P-20260401-YZABAA`](./program_manifests/20260401-YZABAA.json)
+- rerun [`T-20260401-Z`](./tranche_manifests/20260401-Z-block-uniformity-audit.json) cleanly on the fixed mixer-only-block implementation
+- after `Z` is repaired, decide whether `AA4` deserves a focused follow-up branch around interleaved upper attention
+- keep the current frontier [`AL-20260331-017`](./experiments.tsv) as the main comparison anchor
 
 ## Later Backlog
 
-- revisit the `AL-20260331-017` winner only after the new architecture questions land cleanly
-- narrow top-only routing follow-up only if it still looks complementary after `AA`
+- revisit the `AL-20260331-017` winner only after the repaired `Z` tranche and any `AA4` follow-up land
+- narrow top-only routing follow-up only if it still looks complementary after the upper-attention story is clearer
 - later MLP follow-up around gated SiLU under tighter size control and `relu + quadratic` variants
 
 ## Go Deeper
 
+- Frontier memo: [`frontier.md`](./frontier.md)
 - Tranche map: [`tranches.md`](./tranches.md)
 - Idea bank: [`ideas.md`](./ideas.md)
 - Durable findings: [`findings.md`](./findings.md)

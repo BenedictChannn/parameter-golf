@@ -1157,7 +1157,7 @@ Top-level chain:
 
 ### T-20260401-Y: MLP Structure Minimalism
 
-**Status:** runnable
+**Status:** completed
 
 **Goal**  
 Question the dense expand-project FFN assumption directly instead of only comparing activation families.
@@ -1184,9 +1184,16 @@ Does every block really need a full dense project-up then project-down MLP, or c
 - if `Y1` or `Y3` survives, full expand-project FFNs are overbuilt
 - if `Y4` or `Y5` survives, MLP richness is a depth-specific resource
 
+**Outcome**
+
+- no winner from this tranche
+- `Y1` and `Y3` failed hard, which means the current frontier does not reduce to a no-expand tokenwise MLP story
+- `Y2` and `Y5` also lost clearly, so broad shrinking of dense FFNs is not enough
+- [`AL-20260401-049`](./experiments.tsv) was the only partial survivor, suggesting lower-stack MLP lightening is the only live follow-up inside this family
+
 ### T-20260401-Z: Block Uniformity Audit
 
-**Status:** runnable
+**Status:** partially completed; rerun required
 
 **Goal**  
 Question the assumption that every layer deserves the same full block recipe.
@@ -1213,9 +1220,15 @@ Why should every block contain both token mixing and an FFN, and can some stages
 - if `Z1`, `Z3`, or `Z4` works, the current block template is too uniform
 - if `Z5` works, compute should be concentrated rather than evenly distributed
 
+**Current outcome**
+
+- [`AL-20260401-051`](./experiments.tsv) crashed because `mixer_only` blocks still instantiated dead `mlp_scale` parameters, which tripped DDP unused-parameter detection
+- this has been fixed in commit `97222ab`
+- the tranche needs a clean rerun before any scientific conclusion is recorded
+
 ### T-20260401-AB: Compression-Native Sharing Audit
 
-**Status:** runnable
+**Status:** completed
 
 **Goal**  
 Try a compression-native architecture direction that is qualitatively different from naive low-rank factorization.
@@ -1242,9 +1255,16 @@ Can stage-specific structure be shared across similar layers, so the model stops
 - if `AB1` or `AB2` works, the lower stage is structurally repetitive and overparameterized
 - if `AB4` or `AB5` wins, sharing is useful mainly as reallocation rather than pure savings
 
+**Outcome**
+
+- no winner from this tranche
+- [`AL-20260401-061`](./experiments.tsv) was the least bad sharing run, but still clearly behind the frontier
+- broad lower-stage sharing, top-two attention sharing, and both share-to-reallocate variants all lost
+- current conclusion: naive whole-block sharing is not the next compression-native architecture win
+
 ### T-20260401-AA: Upper Attention Decomposition Audit
 
-**Status:** runnable
+**Status:** completed
 
 **Goal**  
 Question what the remaining upper attention layers are actually doing now that the lower stack is already simplified.
@@ -1271,3 +1291,10 @@ How much full global attention does the upper stack still need, and is the very 
 - if `AA1` or `AA2` works, upper attention is over-provisioned
 - if `AA3` works, top-of-stack routing is part of final reasoning
 - if `AA4` works, periodic global refresh beats dense upper attention
+
+**Outcome**
+
+- no winner from this tranche
+- [`AL-20260401-059`](./experiments.tsv) was by far the best result and nearly tied the frontier, which makes interleaved upper attention the only live survivor
+- `AA1` was only a mild loss, but `AA2`, `AA3`, and `AA5` all failed clearly
+- current conclusion: the upper stack may be simplifiable by interleaving, but not by collapsing it to only one or two global reasoners
