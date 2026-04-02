@@ -22,22 +22,23 @@ This is the first-read dashboard for the current research state. Use this for th
 
 ## Latest Completed Program
 
-- Queue: `S -> T -> U -> V -> W -> X`
-- Status: completed
+- Queue: `Z -> AC -> AD -> AE`
+- Status: partially completed
 - Summary:
-- `S` produced the new frontier and proved cheap routing stacks with the stronger hybrid winner
-- `T` ran successfully after the backend fix, but local attention still lost cleanly on the hybrid backbone
-- `U` showed that naive low-rank factorization is not yet a viable compression-native architecture
-- `V` revived dynamic depth routing in a narrow top-only form
-- `W` kept the broad MLP family anchored on `relu^2`
-- `X` showed mixed linear-plus-quadratic MLP structure is the only polynomial variant still near the frontier
+- `Z` completed cleanly after the mixer-only-block fix and showed that block non-uniformity is real, but only in narrow periodic forms rather than as broad lower-stage FFN removal
+- `AC` mostly falsified the first token-selective-compute story; selective heavy attention was especially destructive
+- `AD` crashed on its first learned-slot candidate and remains operationally unresolved
+- `AE` revived compression-native sharing in a second-generation form: pairwise lower-mixer sharing plus small deltas stayed close, while upper attention and FFN sharing were weaker
 
 ## Latest Completed Architecture Families
 
 - `Y` MLP Structure Minimalism: completed
-- `AB` Compression-Native Sharing: completed
+- `Z` Block Uniformity Audit: completed
 - `AA` Upper Attention Decomposition: completed
-- `Z` Block Uniformity Audit: partially run; `Z1` crashed due to dead MLP-scale parameters on mixer-only blocks and needs a clean rerun on the fixed commit
+- `AB` Compression-Native Sharing: completed
+- `AC` Conditional Heavy / Light Compute: completed
+- `AE` Structured Sharing With Layer Deltas: completed
+- `AD` Latent Upper Reasoner: blocked by runtime crash on the first candidate
 
 ## Working Beliefs
 
@@ -52,28 +53,29 @@ This is the first-read dashboard for the current research state. Use this for th
 - Broad MLP-structure minimalism mostly failed. No-expand MLPs were decisively too weak, and even halving dense FFN width lost clearly. The only survivor was lightening the lower MLPs while keeping full upper MLPs, but it still remained clearly behind the frontier.
 - Naive stage-wise weight sharing is not the next compression-native win. Lower-two sharing was the least bad sharing run, but broad lower sharing, top-two attention sharing, and share-to-reallocate variants all lost cleanly.
 - The upper attention stack is not trivially removable, but it may be reducible by interleaving. The best AA run interleaving upper attention and lighter refinement blocks nearly tied the frontier, while top-two-only and single-final-reasoner plans failed badly.
+- Block non-uniformity is now a live architectural clue. Alternating lower standard and mixer-only blocks stayed close, and periodic heavy/light blocks nearly tied the frontier, while broad lower-stage FFN removal still failed.
+- Naive token-selective compute is not the next win. Top-only selective FFNs were merely survivable, but token-selective heavy attention and joint heavy-token paths collapsed badly.
+- Structured sharing with small deltas is qualitatively better than whole-block sharing. The best lower-mixer pair-sharing run stayed close to the frontier, which suggests lower-stage redundancy exists but only if layer identity is preserved.
 
 ## Open Questions
 
 - Does the `AL-20260331-017` winner still have local headroom in mixer width, kernel, or routing strength, or is this branch now mostly polished?
+- Is periodic block concentration a real simplification path on top of the hybrid winner, or were [`AL-20260401-053`](./experiments.tsv) and [`AL-20260401-055`](./experiments.tsv) only near-misses?
 - Is interleaving upper attention and lighter refinement blocks a real simplification path, or was [`AL-20260401-059`](./experiments.tsv) only a near-miss?
-- If compression-native architecture is still important, what should replace both naive low-rank factorization and naive cross-layer weight sharing?
-- Should the next MLP follow-up focus only on the two live survivors: gated MLPs under tighter size control and mixed linear-plus-quadratic polynomial forms?
+- If compression-native architecture is still important, can lower-stage structured sharing with deltas be strengthened enough to become a real branch, and what should replace the crashed latent-upper-reasoner line?
 
 ## Next Runnable Queue
 
-- rerun [`T-20260401-Z`](./tranche_manifests/20260401-Z-block-uniformity-audit.json) cleanly on the fixed mixer-only-block implementation
-- after `Z` is repaired, decide whether `AA4` deserves a focused follow-up branch around interleaved upper attention
-- after that, three new smoke-validated bold branches are ready: [`T-20260401-AC`](./tranche_manifests/20260401-AC-conditional-heavy-light-compute.json), [`T-20260401-AD`](./tranche_manifests/20260401-AD-latent-upper-reasoner.json), and [`T-20260401-AE`](./tranche_manifests/20260401-AE-structured-sharing-deltas.json)
-- combined runnable queue prepared at [`20260401-ZACADAE.json`](./program_manifests/20260401-ZACADAE.json)
+- debug and rerun [`T-20260401-AD`](./tranche_manifests/20260401-AD-latent-upper-reasoner.json) so the latent upper-reasoner branch becomes science rather than only an implementation stub
+- decide whether block non-uniformity deserves a focused follow-up around periodic heavy/light concentration and alternating lower FFNs
+- decide whether lower-stage pair-sharing with deltas deserves a focused compression-native follow-up, especially as a share-then-reallocate branch
 - keep the current frontier [`AL-20260331-017`](./experiments.tsv) as the main comparison anchor
 
 ## Later Backlog
 
-- revisit the `AL-20260331-017` winner only after the repaired `Z` tranche and any `AA4` follow-up land
+- revisit the `AL-20260331-017` winner only after the latent upper-reasoner branch is repaired and the new near-survivors are either promoted or killed
 - narrow top-only routing follow-up only if it still looks complementary after the upper-attention story is clearer
 - later MLP follow-up around gated SiLU under tighter size control and `relu + quadratic` variants
-- full bold unknown-branch queue prepared at [`20260401-ACADAE.json`](./program_manifests/20260401-ACADAE.json)
 
 ## Go Deeper
 

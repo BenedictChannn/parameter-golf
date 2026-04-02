@@ -509,6 +509,10 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - this questions one of the strongest inherited transformer assumptions directly
 - Manifest: [`20260401-Z-block-uniformity-audit.json`](./tranche_manifests/20260401-Z-block-uniformity-audit.json)
 - Status: active
+- Evidence so far:
+- [`AL-20260401-053`](./experiments.tsv) shows alternating lower standard and mixer-only blocks is a real near-survivor.
+- [`AL-20260401-055`](./experiments.tsv) suggests periodic heavy/light block concentration may be the best form of non-uniformity in this family.
+- [`AL-20260401-052`](./experiments.tsv) and [`AL-20260401-054`](./experiments.tsv) show that blanket lower-stage FFN removal or broad lower-lighting is too aggressive.
 
 ### I-20260401-009 - Compression-Native Sharing
 
@@ -546,7 +550,10 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - FFNs are still important, but that does not imply every token deserves the same FFN budget
 - token-selective compute is one of the biggest unexplored axes in this repo
 - Manifest: [`20260401-AC-conditional-heavy-light-compute.json`](./tranche_manifests/20260401-AC-conditional-heavy-light-compute.json)
-- Status: active
+- Status: parked
+- Evidence so far:
+- [`AL-20260401-066`](./experiments.tsv) was the least bad run and still lost clearly.
+- [`AL-20260401-067`](./experiments.tsv) through [`AL-20260401-070`](./experiments.tsv) show that the first heavy/light routing designs are badly mismatched, especially when attention becomes token-selective.
 
 ### I-20260401-012 - Latent Upper Reasoner
 
@@ -556,7 +563,9 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - the upper stack still needs repeated global refresh, but it may be over-dense in token space
 - a latent upper reasoner attacks compute and memory without just killing global context
 - Manifest: [`20260401-AD-latent-upper-reasoner.json`](./tranche_manifests/20260401-AD-latent-upper-reasoner.json)
-- Status: active
+- Status: blocked pending debug
+- Evidence so far:
+- [`AL-20260401-071`](./experiments.tsv) crashed before producing a metric, so the family is still untested scientifically.
 
 ### I-20260401-013 - Structured Sharing With Layer Deltas
 
@@ -567,6 +576,10 @@ These are the next six tranches worth planning after the active latent-KV tranch
 - the next compression-native branch likely needs selective shared structure, not total tying
 - Manifest: [`20260401-AE-structured-sharing-deltas.json`](./tranche_manifests/20260401-AE-structured-sharing-deltas.json)
 - Status: active
+- Evidence so far:
+- [`AL-20260401-077`](./experiments.tsv) was the strongest AE run and suggests lower-mixer pair-sharing with deltas is a real near-survivor.
+- [`AL-20260401-080`](./experiments.tsv) supports the idea that sharing may be most useful when paired with careful budget reallocation.
+- [`AL-20260401-076`](./experiments.tsv) and [`AL-20260401-079`](./experiments.tsv) show upper-attention sharing is weaker than lower-stage sharing, and [`AL-20260401-078`](./experiments.tsv) shows FFN sharing remains weak.
 
 ### Park
 

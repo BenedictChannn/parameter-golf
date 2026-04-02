@@ -494,3 +494,43 @@ Use [`state.md`](./state.md) for the live dashboard, [`ideas.md`](./ideas.md) fo
 - [`AL-20260401-059`](./experiments.tsv) still lost to the frontier, so interleaving is only a near-survivor, not a winner.
 - Next falsification:
 - if the upper-attention family is resumed, focus on interleaved or periodic-refresh designs, not further collapse to only one or two global layers.
+
+## F-20260402-040: Block Non-Uniformity Is Real, But The Winning Shape Looks Periodic Rather Than Broadly Lower-Light
+
+- Claim: the current hybrid frontier does not want a uniform block recipe, but it also does not want blanket lower-stage FFN removal; the surviving simplification signal is periodic concentration of capacity.
+- Confidence: medium
+- Evidence:
+- [`AL-20260401-053`](./experiments.tsv) stayed close to the frontier by alternating standard and mixer-only blocks in the lower stage.
+- [`AL-20260401-055`](./experiments.tsv) nearly tied the frontier with an alternating heavy/light block pattern across the stack.
+- [`AL-20260401-052`](./experiments.tsv) and [`AL-20260401-054`](./experiments.tsv) show that broad lower-stage FFN removal or broad lower-light blocks lose too much quality.
+- Counterevidence:
+- neither near-survivor actually beat the frontier, so this remains a shape clue rather than a promoted branch.
+- Next falsification:
+- if block non-uniformity is revisited, test periodic concentration or alternating recipes; do not retry blanket lower-stage FFN removal as the default story.
+
+## F-20260402-041: Naive Token-Selective Compute Is The Wrong First Efficiency Path
+
+- Claim: the current hybrid backbone does not tolerate naive heavy/light token routing well, especially when global attention becomes token-selective.
+- Confidence: high
+- Evidence:
+- [`AL-20260401-066`](./experiments.tsv) was the least bad AC run and still lost clearly, even with top-only selective FFN routing.
+- [`AL-20260401-068`](./experiments.tsv), [`AL-20260401-069`](./experiments.tsv), and [`AL-20260401-070`](./experiments.tsv) all collapsed badly once heavy attention or a full heavy-token path was introduced.
+- [`AL-20260401-067`](./experiments.tsv) shows that spreading selective FFN routing across the whole upper stack also degrades heavily.
+- Counterevidence:
+- `AC1` did not collapse the way the attention variants did, so a much narrower top-only selective-FFN idea is not completely dead.
+- Next falsification:
+- if token-selective compute is revisited, start from top-only or more weakly selective FFN paths; do not lead with selective heavy attention again.
+
+## F-20260402-042: Structured Sharing With Small Deltas Revives Compression-Native Sharing, Mostly In The Lower Mixer Stage
+
+- Claim: unlike whole-block sharing, sub-block sharing with small deltas is a viable compression-native near-survivor, especially when applied pairwise in the lower mixer stage.
+- Confidence: medium
+- Evidence:
+- [`AL-20260401-077`](./experiments.tsv) was only modestly behind the frontier and clearly better than the old whole-block sharing branch.
+- [`AL-20260401-080`](./experiments.tsv) stayed similarly close while widening the mixer, which supports a “share then reallocate” interpretation.
+- [`AL-20260401-076`](./experiments.tsv) and [`AL-20260401-079`](./experiments.tsv) show that upper-attention sharing is survivable but weaker, especially when the sharing span gets broader than simple pairs.
+- [`AL-20260401-078`](./experiments.tsv) shows FFN sharing remains the weakest sharing target.
+- Counterevidence:
+- none of the AE runs beat the frontier, so this is still a near-survivor rather than a proven new branch.
+- Next falsification:
+- if compression-native sharing is resumed, focus on local lower-stage sharing with layer deltas and possible budget reallocation; do not start from FFN sharing or broad upper-band sharing.

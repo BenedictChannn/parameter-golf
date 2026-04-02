@@ -1193,7 +1193,7 @@ Does every block really need a full dense project-up then project-down MLP, or c
 
 ### T-20260401-Z: Block Uniformity Audit
 
-**Status:** partially completed; rerun required
+**Status:** completed
 
 **Goal**  
 Question the assumption that every layer deserves the same full block recipe.
@@ -1220,11 +1220,13 @@ Why should every block contain both token mixing and an FFN, and can some stages
 - if `Z1`, `Z3`, or `Z4` works, the current block template is too uniform
 - if `Z5` works, compute should be concentrated rather than evenly distributed
 
-**Current outcome**
+**Outcome**
 
-- [`AL-20260401-051`](./experiments.tsv) crashed because `mixer_only` blocks still instantiated dead `mlp_scale` parameters, which tripped DDP unused-parameter detection
-- this has been fixed in commit `97222ab`
-- the tranche needs a clean rerun before any scientific conclusion is recorded
+- [`AL-20260401-051`](./experiments.tsv) crashed because `mixer_only` blocks still instantiated dead `mlp_scale` parameters, which tripped DDP unused-parameter detection; this was fixed in commit `97222ab`
+- [`AL-20260401-052`](./experiments.tsv) and [`AL-20260401-054`](./experiments.tsv) show that blanket lower-stage FFN removal or broad lower-light blocks lose too much quality
+- [`AL-20260401-053`](./experiments.tsv) stayed close, which means alternating lower standard and mixer-only blocks is a real near-survivor
+- [`AL-20260401-055`](./experiments.tsv) nearly tied the frontier, which suggests periodic heavy/light block concentration is the most interesting live signal in the family
+- current conclusion: block non-uniformity is real, but the good version looks periodic rather than “make the whole lower stage cheap”
 
 ### T-20260401-AB: Compression-Native Sharing Audit
 
@@ -1301,7 +1303,7 @@ How much full global attention does the upper stack still need, and is the very 
 
 ### T-20260401-AC: Conditional Heavy Light Compute
 
-**Status:** runnable
+**Status:** completed
 
 **Goal**  
 Test whether the model should spend full upper-stack attention and FFN compute only on routed important tokens.
@@ -1309,16 +1311,16 @@ Test whether the model should spend full upper-stack attention and FFN compute o
 **Main question**  
 Is token-selective compute the next big efficiency frontier, rather than another uniform layer-wise simplification?
 
-**Implementation status**
+**Outcome**
 
-- implemented in [`train_gpt.py`](./train_gpt.py) via the `TOKEN_SELECTIVE_*` env family
-- supports FFN-only, attention-only, and joint heavy-token paths
-- supports learned and norm-based routing
-- smoke-validated across all five manifest candidates
+- [`AL-20260401-066`](./experiments.tsv) was the only non-catastrophic result, and it still lost clearly
+- [`AL-20260401-067`](./experiments.tsv) shows that broad upper-stack selective FFN routing is too destructive in this first form
+- [`AL-20260401-068`](./experiments.tsv), [`AL-20260401-069`](./experiments.tsv), and [`AL-20260401-070`](./experiments.tsv) show that token-selective heavy attention and joint heavy-token paths are disastrous
+- current conclusion: naive token-selective compute is the wrong first efficiency path on this backbone, especially once global attention becomes token-selective
 
 ### T-20260401-AD: Latent Upper Reasoner
 
-**Status:** runnable
+**Status:** blocked after first crash
 
 **Goal**  
 Test whether the upper stack can preserve global reasoning quality while operating over a compact latent sequence.
@@ -1326,15 +1328,14 @@ Test whether the upper stack can preserve global reasoning quality while operati
 **Main question**  
 Can upper reasoning move off the full token stream and into a smaller latent workspace?
 
-**Implementation status**
+**Current outcome**
 
-- implemented in [`train_gpt.py`](./train_gpt.py) via the `LATENT_REASONER_*` env family
-- supports pooled and learned latent-slot modes over selected upper layers
-- smoke-validated across all five manifest candidates
+- [`AL-20260401-071`](./experiments.tsv) crashed immediately on the first learned-slot candidate before producing a metric
+- no scientific conclusion yet; the family remains operationally unresolved rather than falsified
 
 ### T-20260401-AE: Structured Sharing With Layer Deltas
 
-**Status:** runnable
+**Status:** completed
 
 **Goal**  
 Test whether sub-block sharing plus small per-layer deltas beats the blunt compression-native stories that already failed.
@@ -1342,8 +1343,10 @@ Test whether sub-block sharing plus small per-layer deltas beats the blunt compr
 **Main question**  
 Can the model share structure across attention, mixer, or FFN submodules without giving up layer individuality?
 
-**Implementation status**
+**Outcome**
 
-- implemented in [`train_gpt.py`](./train_gpt.py) via the `SHARE_DELTA_*` env family
-- supports structured sharing for attention, mixer, and MLP submodules with low-rank output deltas
-- smoke-validated across all five manifest candidates, including state-dict dedupe checks
+- [`AL-20260401-077`](./experiments.tsv) was the best run and showed that lower-mixer pair-sharing with deltas is a real near-survivor
+- [`AL-20260401-080`](./experiments.tsv) stayed similarly close while widening the mixer, which supports a share-then-reallocate interpretation
+- [`AL-20260401-076`](./experiments.tsv) and [`AL-20260401-079`](./experiments.tsv) show that upper-attention sharing is survivable but weaker, especially when the sharing span grows broader
+- [`AL-20260401-078`](./experiments.tsv) shows FFN sharing remains the weakest target
+- current conclusion: structured sharing with small deltas revives compression-native sharing, but mainly as a lower-stage pairwise mechanism rather than a broad upper-band or FFN-sharing story
