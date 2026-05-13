@@ -292,3 +292,166 @@ Use [`state.md`](./state.md) for the live dashboard, [`ideas.md`](./ideas.md) fo
 - [`AL-20260330-129`](./experiments.tsv) was close enough that output-path-specific cooldown might still matter in a different architecture regime.
 - Next falsification:
 - if quantization-aware scheduling is revisited, focus on output-path-sensitive finishing or architecture-specific tails rather than broad colder schedules.
+
+
+## F-20260331-024: The Hybrid Mixer Frontier Still Has Local Headroom
+
+- Claim: the lower-stack hybrid-mixer family was not locally exhausted at [`AL-20260330-104`](./experiments.tsv); refining the mechanism still produced meaningful gains.
+- Confidence: high
+- Evidence:
+- [`AL-20260331-001`](./experiments.tsv) improved the frontier further with lower-three mixers.
+- [`AL-20260331-004`](./experiments.tsv) improved again and became the new best valid run at `1.3451`.
+- [`AL-20260331-005`](./experiments.tsv) also beat the old best via a wider mixer kernel.
+- Counterevidence:
+- [`AL-20260331-002`](./experiments.tsv) shows the win does not simply scale with “more mixer layers.”
+- [`AL-20260331-003`](./experiments.tsv) stayed flat, so not every refinement direction pays.
+- Next falsification:
+- test whether the cheap-routing package stacks with the stronger hybrid winner, or whether both families are buying the same underlying effect.
+
+## F-20260331-025: The Lower Stack Wants Mixers, But Not Too Many
+
+- Claim: the lower stack remains the right place to replace attention, but pushing the replacement from four lower layers to five goes too far on the current frontier.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260331-002`](./experiments.tsv) was smaller and faster than the anchor, but still regressed in quality.
+- [`AL-20260331-001`](./experiments.tsv) and [`AL-20260331-004`](./experiments.tsv) both beat the old best without needing a fifth lower mixer layer.
+- Counterevidence:
+- the quality loss at five mixers was modest, not catastrophic, so the family still tolerates aggressive lower-stack replacement better than many alternatives.
+- Next falsification:
+- test whether five lower mixers only works when paired with a stronger mixer or a complementary routing change.
+
+## F-20260331-026: Broad Warmdown Is Still The Wrong Schedule Story On The Hybrid Winner
+
+- Claim: even on the stronger hybrid-mixer backbone, broad warmdown remains the wrong architecture-specific schedule story.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260331-011`](./experiments.tsv) and [`AL-20260331-012`](./experiments.tsv) both regressed clearly.
+- [`AL-20260331-015`](./experiments.tsv) shows the broader mild-tail combo also failed.
+- Counterevidence:
+- [`AL-20260331-013`](./experiments.tsv) and [`AL-20260331-014`](./experiments.tsv) stayed close enough that some narrow end-of-training interventions may still matter.
+- Next falsification:
+- if schedule work is revisited, focus on output-path-sensitive cooldown or very narrow stabilization rather than global colder tails.
+
+## F-20260331-027: Head-Focused Cooldown Is The Only Live Schedule Hint
+
+- Claim: among the architecture-specific schedule ideas tested so far, only output-path-sensitive cooldown stayed in the noise band of the hybrid frontier.
+- Confidence: medium
+- Evidence:
+- [`AL-20260331-014`](./experiments.tsv) finished at `1.3489`, effectively tying the older hybrid winner.
+- It beat the broader warmdown and combined-tail variants cleanly.
+- Counterevidence:
+- it still did not beat the actual hybrid frontier, so this is a hint rather than a win.
+- Next falsification:
+- if schedule work is resumed later, apply head-focused cooldown on top of the stronger `AL-20260331-004` backbone or after another architecture change.
+
+## F-20260331-028: Late-Layer AttnRes-lite Is The Wrong Routing Shape On This Frontier
+
+- Claim: replacing fixed routing with AttnRes-lite across late layers is strongly misaligned with the current hybrid-mixer frontier.
+- Confidence: high
+- Evidence:
+- [`AL-20260331-007`](./experiments.tsv) and [`AL-20260331-009`](./experiments.tsv) both regressed catastrophically into the `1.50+` band.
+- [`AL-20260331-010`](./experiments.tsv) shows the failure persists even when stacked on top of the cheap-routing package.
+- Counterevidence:
+- the tranche still lacks a clean rerun of `Q1`, so the exact three-source late-layer number is missing.
+- Next falsification:
+- only revisit late-layer depth routing if the mechanism itself is redesigned substantially rather than simply rerun.
+
+## F-20260331-029: If Dynamic Depth Routing Helps At All, It Belongs Only At The Top
+
+- Claim: the only AttnRes-lite placement that looked even remotely viable was restricting the mechanism to the top two layers.
+- Confidence: medium
+- Evidence:
+- [`AL-20260331-008`](./experiments.tsv) at `1.3499` was vastly better than the other completed Q runs and stayed close to the old hybrid anchor.
+- All broader late-layer placements were dramatically worse.
+- Counterevidence:
+- [`AL-20260331-008`](./experiments.tsv) still lost clearly to the current best [`AL-20260331-004`](./experiments.tsv), so this is a faint hint rather than a live frontier result.
+- Next falsification:
+- if AttnRes-lite is revisited, test an even lighter top-of-stack-only version or a more constrained top-layer gate rather than broad late-stack routing.
+
+## F-20260331-030: Cheap Fixed Routing And Dynamic Depth Routing Did Not Stack
+
+- Claim: the best cheap-routing package and the first AttnRes-lite mechanism are not complementary in their current forms.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260331-010`](./experiments.tsv) stayed in the same catastrophic regime as the other broad late-layer AttnRes-lite runs.
+- It did not recover toward the hybrid frontier even though the cheap-routing package was itself a real secondary winner.
+- Counterevidence:
+- this only tests one combo form; a future top-only or much lighter depth-routing design could still interact differently.
+- Next falsification:
+- if routing combo work is revisited, combine cheap routing only with top-of-stack dynamic routing, not the broad late-layer AttnRes-lite design.
+
+## F-20260401-031: Shared Skip Gates Are The Cleanest Stacking Win On The Hybrid Frontier
+
+- Claim: the strongest routing change to pair with the widened lower-four-mixer winner is shared scalar skip gating, not the full cheap-routing package.
+- Confidence: high
+- Evidence:
+- [`AL-20260331-017`](./experiments.tsv) is the current best valid run at `1.3429`.
+- [`AL-20260331-016`](./experiments.tsv) also won, but the full routing package was slightly worse than skip gates alone.
+- Counterevidence:
+- [`AL-20260331-018`](./experiments.tsv) shows scalar `resid_mix` is also compatible, so the story is not exclusively about skip gates.
+- Next falsification:
+- test whether the `AL-20260331-017` line still wants any additional routing simplification, or whether skip gates already capture nearly all of the available gain.
+
+## F-20260401-032: Local Attention On The Remaining Attention Stack Is Mostly The Wrong Trade
+
+- Claim: once the lower stack is already mixer-heavy, localizing the remaining attention layers hurts more than it helps.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260331-022`](./experiments.tsv) failed badly with four upper local-attention layers.
+- [`AL-20260331-023`](./experiments.tsv) was the best repaired local-window run, but still lost clearly at `1.3545`.
+- [`AL-20260331-024`](./experiments.tsv) and [`AL-20260331-025`](./experiments.tsv) also lost cleanly.
+- Counterevidence:
+- [`AL-20260331-021`](./experiments.tsv) crashed before producing the lightest top-two-local `256` result, so that exact point remains unmeasured.
+- Next falsification:
+- only revisit this family if there is a new theory beyond plain windowed local attention on the surviving attention layers.
+
+## F-20260401-033: Naive Low-Rank Factorization Is Not Yet A Viable Compression-Native Backbone
+
+- Claim: the first compression-native branch failed because straightforward low-rank factorization removes too much useful structure from the current hybrid winner.
+- Confidence: high
+- Evidence:
+- [`AL-20260331-026`](./experiments.tsv) and [`AL-20260331-027`](./experiments.tsv) both lost clearly despite saving bytes.
+- [`AL-20260331-028`](./experiments.tsv) and [`AL-20260331-029`](./experiments.tsv) show that MLP factorization is far more destructive still.
+- [`AL-20260331-030`](./experiments.tsv) confirms that combining the two does not rescue the idea.
+- Counterevidence:
+- the branch only tested one compression-native mechanism family; it does not rule out other quantization-aware or structure-aware designs.
+- Next falsification:
+- the next compression-native tranche should test a qualitatively different mechanism, not just another rank sweep.
+
+## F-20260401-034: Top-Only Dynamic Routing Is A Real Secondary Family
+
+- Claim: dynamic depth routing is only viable on this frontier when it is kept extremely narrow: top-only, low-source, and preferably paired with clean fixed routing.
+- Confidence: medium-high
+- Evidence:
+- [`AL-20260331-031`](./experiments.tsv) and [`AL-20260331-032`](./experiments.tsv) both beat the older hybrid anchor.
+- [`AL-20260331-035`](./experiments.tsv) at `1.3433` became the second-best run in the whole `S` through `X` queue.
+- [`AL-20260331-033`](./experiments.tsv) and [`AL-20260331-034`](./experiments.tsv) show that coarse shared routing and extra source complexity both make the top-only line worse.
+- Counterevidence:
+- even the best top-only result still lost to [`AL-20260331-017`](./experiments.tsv), so the family is secondary rather than dominant.
+- Next falsification:
+- if revisited, keep the router top-only and light; do not return to broad late-layer routing.
+
+## F-20260401-035: The Broad MLP Family Still Belongs To ReLU-Squared
+
+- Claim: on the current hybrid frontier, `relu^2` remains the right broad MLP family and the smooth replacements are not competitive.
+- Confidence: high
+- Evidence:
+- [`AL-20260331-036`](./experiments.tsv) reproduced the frontier class under the new MLP-mode surface.
+- [`AL-20260331-037`](./experiments.tsv), [`AL-20260331-038`](./experiments.tsv), and [`AL-20260331-039`](./experiments.tsv) all regressed clearly.
+- Counterevidence:
+- [`AL-20260331-040`](./experiments.tsv) suggests a gated MLP could still be interesting if its size cost is brought under control.
+- Next falsification:
+- if the MLP family is revisited soon, focus on size-controlled gated variants rather than plain smooth activations.
+
+## F-20260401-036: Mixed Linear-Plus-Quadratic MLPs Are The Only Live Polynomial Variant
+
+- Claim: inside the polynomial family, the only variant that stayed near the frontier was mixing linear and quadratic behavior; cubic structure mostly hurt.
+- Confidence: medium
+- Evidence:
+- [`AL-20260331-043`](./experiments.tsv) at `1.3444` was the best non-anchor MLP result in the polynomial tranche.
+- [`AL-20260331-042`](./experiments.tsv) and [`AL-20260331-044`](./experiments.tsv) show that cubic-heavy variants regress clearly.
+- [`AL-20260331-045`](./experiments.tsv) stayed close but still did not beat the plain `relu^2` baseline.
+- Counterevidence:
+- the gains over the anchor are still small, so this is a later refinement path rather than a proven new frontier family.
+- Next falsification:
+- if polynomial MLPs are revisited, treat `relu + quadratic` as the anchor and ignore cubic-heavy forms unless a new theory justifies them.

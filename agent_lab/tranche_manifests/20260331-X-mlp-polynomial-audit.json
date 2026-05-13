@@ -1,0 +1,92 @@
+{
+  "tranche_id": "T-20260331-X",
+  "title": "Polynomial MLP Audit",
+  "research_question": "If polynomial-style MLPs are live on this backbone, what kind of polynomial behavior does the model actually want?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-004",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "x1-relu2-control",
+      "exp_id": "AL-20260331-041",
+      "goal": "Establish the local polynomial-family control run.",
+      "hypothesis": "Current relu^2 remains the right baseline inside the polynomial family.",
+      "what_it_teaches": "Provides the local reference for all other polynomial variants.",
+      "why_worthy": "This is the correct anchor inside a tranche that changes only polynomial structure.",
+      "description": "run the current hybrid winner with relu^2 under the new MLP-mode surface",
+      "env": {
+        "MLP_MODE": "relu2"
+      }
+    },
+    {
+      "name": "x2-relu3",
+      "exp_id": "AL-20260331-042",
+      "goal": "Test stronger polynomial emphasis.",
+      "hypothesis": "A cubic positive path may be more expressive than relu^2, but may also be more fragile.",
+      "what_it_teaches": "Whether the frontier wants stronger positive amplification than a square.",
+      "why_worthy": "This is the cleanest direct escalation from the current relu^2 path.",
+      "description": "replace relu^2 with relu^3",
+      "env": {
+        "MLP_MODE": "relu3"
+      }
+    },
+    {
+      "name": "x3-relu-linear-quad",
+      "exp_id": "AL-20260331-043",
+      "goal": "Mix gentle and stronger polynomial behavior.",
+      "hypothesis": "The model may want both a linear positive path and a quadratic amplification path.",
+      "what_it_teaches": "Whether mixed polynomial behavior beats pure quadratic behavior.",
+      "why_worthy": "This tests a true structural alternative, not just a stronger polynomial order.",
+      "description": "use a relu + 0.5 relu^2 MLP",
+      "env": {
+        "MLP_MODE": "relu_linear_quad"
+      }
+    },
+    {
+      "name": "x4-relu2-cubic",
+      "exp_id": "AL-20260331-044",
+      "goal": "Test whether a small cubic term improves on pure quadratic behavior.",
+      "hypothesis": "A mostly quadratic path with a little cubic emphasis may be the best compromise.",
+      "what_it_teaches": "Whether richer polynomial shaping is helpful without going fully cubic.",
+      "why_worthy": "This is the most justified richer polynomial variant once pure cubic is represented.",
+      "description": "use relu^2 plus a small cubic term",
+      "env": {
+        "MLP_MODE": "relu2_cubic"
+      }
+    },
+    {
+      "name": "x5-norm-square",
+      "exp_id": "AL-20260331-045",
+      "goal": "Test whether polynomial behavior works better when stabilized first.",
+      "hypothesis": "A normalized square path may keep the benefits of polynomial shaping while being more quantization- and optimization-friendly.",
+      "what_it_teaches": "Whether the main issue in polynomial MLPs is the nonlinearity or its pre-activation scale.",
+      "why_worthy": "This turns the polynomial tranche into a true mechanism study rather than only an order sweep.",
+      "description": "apply RMSNorm before squaring in the MLP hidden path",
+      "env": {
+        "MLP_MODE": "norm_square"
+      }
+    }
+  ]
+}

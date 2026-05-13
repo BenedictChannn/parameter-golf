@@ -1,0 +1,97 @@
+{
+  "tranche_id": "T-20260331-T",
+  "title": "Local-Global Attention Recovery",
+  "research_question": "Once the local-attention path is debugged, do the remaining attention layers in the hybrid winner all need global context, or can some of them localize safely?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-004",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "t1-upper-two-local-256",
+      "exp_id": "AL-20260331-021",
+      "goal": "Test whether the top of the remaining attention stack can localize safely.",
+      "hypothesis": "The last two attention layers may not need full global context if the lower stack is already mixer-heavy.",
+      "what_it_teaches": "Whether local attention can survive at the very top of the hybrid backbone.",
+      "why_worthy": "This is the lightest valid local-global probe on the current winner and directly attacks an unresolved architecture question.",
+      "description": "use a 256-token local window in the top two attention layers of the hybrid winner",
+      "env": {
+        "LOCAL_ATTN_LAYERS": "7,8",
+        "LOCAL_ATTN_WINDOW": "256"
+      }
+    },
+    {
+      "name": "t2-upper-four-local-256",
+      "exp_id": "AL-20260331-022",
+      "goal": "Test a broader local-global split on the hybrid backbone.",
+      "hypothesis": "The whole upper attention stack may tolerate locality once the lower stack is already handled by mixers.",
+      "what_it_teaches": "Whether local attention can replace most remaining global attention on the hybrid winner.",
+      "why_worthy": "This is the natural next bracket after the lightest valid placement.",
+      "description": "use a 256-token local window in four upper layers above the mixers",
+      "env": {
+        "LOCAL_ATTN_LAYERS": "4,5,6,7",
+        "LOCAL_ATTN_WINDOW": "256"
+      }
+    },
+    {
+      "name": "t3-top-two-local-512",
+      "exp_id": "AL-20260331-023",
+      "goal": "Test whether the earlier local-global failure was caused by an overly narrow local window.",
+      "hypothesis": "A larger local window may preserve enough global structure to keep the hybrid winner intact.",
+      "what_it_teaches": "Whether local attention is window-limited rather than conceptually wrong on this backbone.",
+      "why_worthy": "This cleanly separates placement failure from window-size failure.",
+      "description": "use a 512-token local window in the top two attention layers",
+      "env": {
+        "LOCAL_ATTN_LAYERS": "7,8",
+        "LOCAL_ATTN_WINDOW": "512"
+      }
+    },
+    {
+      "name": "t4-alternating-upper-local-256",
+      "exp_id": "AL-20260331-024",
+      "goal": "Interleave local and global attention instead of grouping them contiguously.",
+      "hypothesis": "Alternating local and global attention may refresh global context often enough without paying for it in every attention block.",
+      "what_it_teaches": "Whether alternating placement is cleaner than contiguous local bands.",
+      "why_worthy": "This tests a distinct architecture theory, not just another window-size sweep.",
+      "description": "alternate local attention through the remaining attention layers of the hybrid winner",
+      "env": {
+        "LOCAL_ATTN_LAYERS": "4,6,8",
+        "LOCAL_ATTN_WINDOW": "256"
+      }
+    },
+    {
+      "name": "t5-upper-two-local-128",
+      "exp_id": "AL-20260331-025",
+      "goal": "Push the safest local placement harder.",
+      "hypothesis": "If top-local attention is viable, a smaller window may buy real savings before quality collapses.",
+      "what_it_teaches": "Whether the local-global idea has headroom once a safe placement is found.",
+      "why_worthy": "This is the right aggressiveness test only after the safer top-two placement is represented in the tranche.",
+      "description": "use a 128-token local window in the top two attention layers",
+      "env": {
+        "LOCAL_ATTN_LAYERS": "7,8",
+        "LOCAL_ATTN_WINDOW": "128"
+      }
+    }
+  ]
+}

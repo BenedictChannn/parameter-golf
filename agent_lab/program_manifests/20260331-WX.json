@@ -1,0 +1,9 @@
+{
+  "program_id": "P-20260331-WX",
+  "title": "MLP Exploration Queue",
+  "description": "Run the two dedicated MLP tranches sequentially: broad family audit first, then polynomial audit.",
+  "tranches": [
+    "agent_lab/tranche_manifests/20260331-W-mlp-family-audit.json",
+    "agent_lab/tranche_manifests/20260331-X-mlp-polynomial-audit.json"
+  ]
+}

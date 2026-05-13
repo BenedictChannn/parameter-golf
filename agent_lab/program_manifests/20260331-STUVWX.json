@@ -1,0 +1,13 @@
+{
+  "program_id": "P-20260331-STUVWX",
+  "title": "Full Next-Tranche Queue",
+  "description": "Run all next planned bold tranches sequentially: architecture-first families S through V, then the two MLP exploration tranches W and X.",
+  "tranches": [
+    "agent_lab/tranche_manifests/20260331-S-hybrid-mixer-routing-combo.json",
+    "agent_lab/tranche_manifests/20260331-T-local-global-recovery.json",
+    "agent_lab/tranche_manifests/20260331-U-compression-native-backbone.json",
+    "agent_lab/tranche_manifests/20260331-V-top-only-attnres-revisit.json",
+    "agent_lab/tranche_manifests/20260331-W-mlp-family-audit.json",
+    "agent_lab/tranche_manifests/20260331-X-mlp-polynomial-audit.json"
+  ]
+}

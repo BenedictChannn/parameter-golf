@@ -1,0 +1,92 @@
+{
+  "tranche_id": "T-20260331-W",
+  "title": "Broad MLP Family Audit",
+  "research_question": "Is the current relu^2 MLP actually the right activation family for the current frontier backbone, or should the lab move toward smoother or gated MLPs?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-004",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "w1-relu2-control",
+      "exp_id": "AL-20260331-036",
+      "goal": "Establish a tranche-local control run on the new MLP code path.",
+      "hypothesis": "The new MLP mode implementation should preserve the current relu^2 behavior cleanly.",
+      "what_it_teaches": "Whether later activation-family comparisons are being made on a faithful control path.",
+      "why_worthy": "A control is justified here because the MLP implementation surface itself changed.",
+      "description": "run the current hybrid winner through the new relu^2 MLP path",
+      "env": {
+        "MLP_MODE": "relu2"
+      }
+    },
+    {
+      "name": "w2-relu",
+      "exp_id": "AL-20260331-037",
+      "goal": "Test whether the square is doing meaningful work.",
+      "hypothesis": "If polynomial emphasis matters, plain ReLU should lose to relu^2.",
+      "what_it_teaches": "Whether the frontier depends on the quadratic behavior rather than just positivity and sparsity.",
+      "why_worthy": "This is the most basic mechanistic control inside the MLP family.",
+      "description": "replace the current relu^2 MLP with plain ReLU",
+      "env": {
+        "MLP_MODE": "relu"
+      }
+    },
+    {
+      "name": "w3-silu",
+      "exp_id": "AL-20260331-038",
+      "goal": "Test a smooth modern activation family.",
+      "hypothesis": "SiLU may give cleaner feature shaping than relu^2 on this small-model frontier.",
+      "what_it_teaches": "Whether the MLP family should pivot toward smooth nonlinearities.",
+      "why_worthy": "This is one of the strongest broad-family alternatives to the current polynomial-style MLP.",
+      "description": "replace the current MLP activation with SiLU",
+      "env": {
+        "MLP_MODE": "silu"
+      }
+    },
+    {
+      "name": "w4-gelu",
+      "exp_id": "AL-20260331-039",
+      "goal": "Test another smooth activation with softer gating behavior.",
+      "hypothesis": "GELU may fit this small-model regime better than hard-threshold polynomial behavior.",
+      "what_it_teaches": "Whether the broad activation family should move toward GELU-like behavior.",
+      "why_worthy": "This gives a true second smooth-family comparison rather than over-reading only SiLU.",
+      "description": "replace the current MLP activation with GELU",
+      "env": {
+        "MLP_MODE": "gelu"
+      }
+    },
+    {
+      "name": "w5-glu-silu",
+      "exp_id": "AL-20260331-040",
+      "goal": "Test whether gating is the real missing ingredient rather than just a different scalar activation.",
+      "hypothesis": "A simple gated SiLU MLP may outperform all one-stream activations on this backbone.",
+      "what_it_teaches": "Whether the next MLP branch should become a gated-family branch rather than a polynomial-family branch.",
+      "why_worthy": "This is the cleanest broad-family escalation beyond one-stream activations.",
+      "description": "replace the current MLP with a simple gated SiLU variant",
+      "env": {
+        "MLP_MODE": "glu_silu"
+      }
+    }
+  ]
+}

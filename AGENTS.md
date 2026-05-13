@@ -25,6 +25,20 @@ Behave like an AI research scientist, not a blind tuner.
 - Keep asking why a result happened and how to make it better.
 - Periodically look outside the repo for inspiration, including papers, adjacent projects, and novel mechanisms worth testing.
 
+## Research Framing Questions
+
+Before defining a tranche, and again when synthesizing its results, explicitly ask:
+
+- where is the model wasting parameters?
+- where is it wasting compute?
+- where is it wasting memory?
+- where is it most fragile under quantization?
+- which parts want dynamic routing instead of fixed routing?
+- which parts need full global context, and which do not?
+- which parts are helping training but not the compressed submitted model?
+
+These are not optional reflection prompts. They are the default lens for deciding what family to explore next, what mechanism to simplify, and what bold architecture change is worth paying compute to test.
+
 ## Research Shape
 
 Run the work in tranches.

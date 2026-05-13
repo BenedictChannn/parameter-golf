@@ -319,6 +319,7 @@ Is the current `9L / MLP2 / 98304 / q8-kv2 / QK_GAIN_INIT=1.5` setup the right a
 
 **Why this tranche exists**
 
+
 - tranche C already solved the main width-vs-size allocation question
 - tranche D already solved the immediate optimization question
 - the next compute-worthy pivot should target a different component family
@@ -781,3 +782,360 @@ These are the next six tranche manifests prepared for the lab. All six are now r
 - Why it is worthy:
 - the submitted model is compressed, not the raw fp model
 - challenge-specific end-of-training behavior may matter more than generic schedule quality
+
+## T-20260331-P: Hybrid Mixer Refinement
+
+**Status:** completed
+
+**Goal**  
+Refine the current best family, [`AL-20260330-104`](./experiments.tsv), instead of treating the first hybrid-mixer win as fully mapped.
+
+**Main question**  
+Is the lower-four-mixer winner best because of the general idea, or is there still clear headroom in the exact mixer placement, width, and kernel?
+
+**Fixed controls**
+
+- start from the current best valid frontier shape
+- `9` layers, `MODEL_DIM=512`, `MLP_MULT=2`
+- `TRAIN_BATCH_TOKENS=98304`
+- `NUM_HEADS=4`, `NUM_KV_HEADS=2`
+- untied dense output path, `LOGIT_SOFTCAP=20`, `HEAD_LR=0.012`
+- primary metric `final_int8_ttt_lora`
+
+**Anchor**
+
+- [`AL-20260330-104`](./experiments.tsv) at `1.3488`
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | Why worthy |
+|---|---|---|---|---|
+| `P1` | lower `3` mixer layers | Test whether the current winner is over-replacing attention | Three lower mixers may preserve most of the gain while recovering some lost expressivity | This tells us whether the win is broad or very placement-specific |
+| `P2` | lower `5` mixer layers | Test whether the frontier still wants even less lower-stack attention | The lower stack may tolerate one more mixer layer than the current winner uses | This is the cleanest way to test whether the winner is still too conservative |
+| `P3` | lower `4` mixers, `MIXER_DIM=192` | Test whether the current mixer itself is overbuilt | A smaller mixer may preserve quality while saving bytes and compute | This asks whether the new mechanism is bigger than it needs to be |
+| `P4` | lower `4` mixers, `MIXER_DIM=320` | Test whether the current mixer is underpowered | A richer mixer may exploit the lower-stack replacement idea better than the current width | This checks whether the current winner is capacity-limited inside the mixer |
+| `P5` | lower `4` mixers, `MIXER_KERNEL=6` | Test whether the lower-stack mixer wants a wider local receptive field | The current kernel may be too narrow, and a slightly wider local window may improve the sequence-mixing trade | This probes mechanism quality, not just placement |
+
+**Decision rule**
+
+- if `P1` wins, the current lower-four placement is likely too aggressive
+- if `P2` wins, the frontier wants even less attention in the lower stack
+- if `P3` wins, the hybrid idea is even more efficient than the current winner suggests
+- if `P4` or `P5` wins, the mixer mechanism itself still has local headroom
+
+**Results**
+
+- [`AL-20260331-001`](./experiments.tsv) (`P1`, lower three mixers) improved the frontier to `1.3453` while staying valid at 15.04 MB.
+- [`AL-20260331-002`](./experiments.tsv) (`P2`, lower five mixers) regressed slightly to `1.3502`, despite better speed and size.
+- [`AL-20260331-003`](./experiments.tsv) (`P3`, lower four with `MIXER_DIM=192`) stayed exactly flat to the old winner at `1.3488` while saving bytes.
+- [`AL-20260331-004`](./experiments.tsv) (`P4`, lower four with `MIXER_DIM=320`) became the new best valid run at `1.3451`.
+- [`AL-20260331-005`](./experiments.tsv) (`P5`, lower four with `MIXER_KERNEL=6`) also improved on the old best to `1.3477`.
+
+**Reading**
+
+- the hybrid family is real and still has headroom
+- lower-stack replacement is robust rather than brittle
+- the best current direction is not “more mixer layers at any cost”; it is a stronger mixer inside the same lower-four placement
+- the lower-five run says the frontier still wants some lower-stack attention
+
+**Outcome**
+
+- best result from this tranche: [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+- main conclusion: the mixer mechanism itself was still underpowered; widening it helped more than changing the lower-stack placement broadly
+- next pivot: test whether the cheap-routing package stacks with the stronger hybrid winner, while keeping AttnRes-lite active as the new bold routing family
+
+## T-20260331-Q: AttnRes-lite Dynamic Depth Routing
+
+**Status:** completed
+
+**Goal**  
+Test whether fixed residual and skip routing should give way to a small, input-dependent depth-routing module over a few earlier layer states.
+
+**Main question**  
+If skip topology matters and routing redesign matters, is the next step to let the model choose which earlier depth representations matter for the current token?
+
+**Fixed controls**
+
+- use the current best hybrid-mixer frontier as the anchor family
+- keep the lower-stack mixer winner fixed unless the candidate explicitly tests a justified combo
+- primary metric `final_int8_ttt_lora`
+
+**Anchor**
+
+- [`AL-20260331-004`](./experiments.tsv) is the current best valid frontier
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | Why worthy |
+|---|---|---|---|---|
+| `Q1` | late-layer AttnRes-lite, 3 sources | Test the cheapest viable depth-routing version | Even a tiny dynamic selector can beat fixed skip routing | Lowest-risk test of the whole family |
+| `Q2` | late-layer AttnRes-lite, 4 sources | Add one more depth option | One extra earlier-layer candidate may be enough to improve routing quality materially | Tests whether the family is source-limited |
+| `Q3` | top-2-layer AttnRes-lite | Ask whether only the final refinement layers need dynamic depth routing | The benefit may come mostly at the very top of the stack | Cheap way to isolate where dynamic routing matters most |
+| `Q4` | late-layer AttnRes-lite with shared routing | Use cheaper shared gating instead of richer per-token freedom | Coarse dynamic routing may be enough, and cheaper than a richer selector | Distinguishes mechanism value from implementation heaviness |
+| `Q5` | AttnRes-lite + cheap routing combo | Test whether dynamic routing stacks with the best fixed-routing redesign | Cheap fixed routing and dynamic depth routing may be complementary rather than redundant | This is the only justified combo run because routing components likely interact |
+
+**Decision rule**
+
+- if `Q1` or `Q2` wins, dynamic depth routing is immediately a live frontier family
+- if only `Q3` wins, the mechanism should stay confined to the top of the stack
+- if `Q4` stays close, the family may be useful in a cheaper form
+- if only `Q5` wins, dynamic routing likely wants to be part of a package, not a standalone change
+
+**Results**
+
+- [`AL-20260331-006`](./experiments.tsv) (`Q1`, late-layer AttnRes-lite with three sources) crashed before producing a metric because TorchDynamo rejected a Python `id()` call inside the candidate-routing helper.
+- [`AL-20260331-007`](./experiments.tsv) (`Q2`, late-layer AttnRes-lite with four sources) failed badly at `1.5043`.
+- [`AL-20260331-008`](./experiments.tsv) (`Q3`, AttnRes-lite only on the top two layers) was much cleaner at `1.3499`, but still did not beat the frontier.
+- [`AL-20260331-009`](./experiments.tsv) (`Q4`, shared routing) was also catastrophic at `1.5133`.
+- [`AL-20260331-010`](./experiments.tsv) (`Q5`, AttnRes-lite plus cheap-routing package) stayed in the same bad regime at `1.5016`.
+
+**Reading**
+
+- broad late-layer dynamic depth routing is the wrong shape on this frontier
+- the problem is not just routing cost, because the cheaper shared-routing version also failed badly
+- the problem is not solved by combining AttnRes-lite with the best fixed cheap-routing package
+- the only remotely live hint is top-of-stack-only routing, which stayed near the old hybrid anchor but still lost to the current best
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: AttnRes-lite as implemented is mostly falsified on the current frontier, except for a faint top-of-stack-only hint that is not yet strong enough to prioritize over better live families
+
+## T-20260331-R: Architecture-Specific Schedules
+
+**Status:** completed
+
+**Goal**  
+Test whether the strongest new architectures are being judged with the wrong training tail, especially near quantization and export.
+
+**Main question**  
+Do the current hybrid winner and similar bold architectures want a different warmdown, stabilization, or final head/backbone cooldown than the old baseline schedule?
+
+**Fixed controls**
+
+- start from the current best hybrid-mixer winner
+- keep architecture fixed unless the candidate explicitly tests a schedule interaction
+- primary metric `final_int8_ttt_lora`
+
+**Anchor**
+
+- [`AL-20260330-104`](./experiments.tsv) at `1.3488`
+
+**Planned experiments**
+
+| ID | Shape | Goal | Hypothesis | Why worthy |
+|---|---|---|---|---|
+| `R1` | short mild warmdown | Test whether the hybrid winner wants a slightly gentler tail | A small warmdown may improve the compressed model without freezing learning too early | This is the cleanest first schedule probe on the new winner |
+| `R2` | longer warmdown | Test whether the winning architecture wants a much calmer finish | The hybrid backbone may be more quantization-sensitive than the old baseline | This brackets the warmdown question instead of guessing one level |
+| `R3` | final stabilization only | Test whether a brief export-focused cooldown helps more than a broad warmdown | The right intervention may be a short final settling phase, not a long decay | This isolates stabilization from full warmdown |
+| `R4` | head-focused final cooldown | Test whether the output path remains the fragile part even on the new hybrid frontier | The compressed model may benefit if the head cools differently from the backbone | This directly follows the near-tie behavior from the earlier quantization tranche |
+| `R5` | mild warmdown + head-focused cooldown | Test the strongest justified schedule combo | A small architecture-aware tail may need both a gentle global decay and extra head control | This is the one schedule combo worth paying for after the single-factor bracket |
+
+**Decision rule**
+
+- if `R1` or `R2` wins, the new backbone wants a different global tail
+- if `R3` wins, final stabilization is the real mechanism
+- if `R4` or `R5` wins, the output path remains the main quantization-sensitive surface even on the hybrid winner
+
+**Results**
+
+- [`AL-20260331-011`](./experiments.tsv) (`R1`, mild warmdown) regressed to `1.3591`.
+- [`AL-20260331-012`](./experiments.tsv) (`R2`, longer warmdown) regressed further to `1.3649`.
+- [`AL-20260331-013`](./experiments.tsv) (`R3`, final stabilization only) stayed respectable at `1.3502` but still lost.
+- [`AL-20260331-014`](./experiments.tsv) (`R4`, head-focused cooldown) nearly tied the old hybrid winner at `1.3489`, but did not beat it.
+- [`AL-20260331-015`](./experiments.tsv) (`R5`, mild tail plus head cooldown) still lost at `1.3517`.
+
+**Reading**
+
+- the stronger hybrid backbone still does not want a broad colder tail
+- the only live schedule hint is output-path-sensitive cooldown
+- even that looks like support, not a new frontier lever
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: broad warmdown remains the wrong story even on the improved hybrid backbone, and schedule work should stay secondary to architecture
+
+## T-20260331-S: Hybrid Mixer + Cheap Routing Combo
+
+**Status:** completed
+
+**Goal**  
+Test whether the stronger hybrid-mixer winner and the cheap-routing redesign are complementary or redundant.
+
+**Anchor**
+
+- [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+
+**Results**
+
+- [`AL-20260331-016`](./experiments.tsv) (`S1`, full cheap-routing package) improved to `1.3434`.
+- [`AL-20260331-017`](./experiments.tsv) (`S2`, shared scalar skip gates only) became the new best valid run at `1.3429`.
+- [`AL-20260331-018`](./experiments.tsv) (`S3`, scalar `resid_mix` only) also improved to `1.3437`.
+- [`AL-20260331-019`](./experiments.tsv) (`S4`, shared residual scales only) lost at `1.3465`.
+- [`AL-20260331-020`](./experiments.tsv) (`S5`, full cheap-routing package plus head cooldown) stayed strong at `1.3445`, but did not beat the simpler skip-gate variant.
+
+**Reading**
+
+- the hybrid winner and routing redesign are genuinely complementary
+- the main compatible piece is shared skip gating
+- scalar `resid_mix` also stacks cleanly, but shared residual scales alone do not
+- adding schedule help on top of the combo was unnecessary in this first pass
+
+**Outcome**
+
+- new best valid run: [`AL-20260331-017`](./experiments.tsv) at `1.3429`
+- main conclusion: the frontier now prefers the widened lower-four-mixer backbone plus shared scalar skip gates
+
+## T-20260331-T: Local-Global Attention Recovery
+
+**Status:** completed
+
+**Goal**  
+After fixing the local-attention backend bug, test whether the remaining attention layers in the hybrid winner still need full global context.
+
+**Anchor**
+
+- [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+
+**Runtime note**
+
+- [`AL-20260331-021`](./experiments.tsv) crashed because the trainer had no valid SDP backend for masked local attention. That was later fixed by enabling a math-SDP fallback when local attention is active.
+
+**Results**
+
+- [`AL-20260331-022`](./experiments.tsv) (`T2`, four upper local layers, window `256`) failed badly at `1.3813`.
+- [`AL-20260331-023`](./experiments.tsv) (`T3`, top two local layers, window `512`) was the cleanest repaired run at `1.3545`, but still lost clearly.
+- [`AL-20260331-024`](./experiments.tsv) (`T4`, alternating upper local layers, window `256`) landed at `1.3603`.
+- [`AL-20260331-025`](./experiments.tsv) (`T5`, top two local layers, window `128`) landed at `1.3582`.
+
+**Reading**
+
+- local attention on the surviving attention stack is mostly the wrong trade on this backbone
+- the best repaired run was the widest top-only window, which says the family is not completely random
+- but nothing in this tranche threatened the frontier
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: plain local-window replacement of the remaining attention layers should be parked unless a new architecture theory emerges
+
+## T-20260331-U: Compression-Native Backbone Audit
+
+**Status:** completed
+
+**Goal**  
+Test whether low-rank factorization can act as a first compression-native architecture branch on top of the hybrid winner.
+
+**Anchor**
+
+- [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+
+**Results**
+
+- [`AL-20260331-026`](./experiments.tsv) (`U1`, factorized attention rank `128`) landed at `1.3689`.
+- [`AL-20260331-027`](./experiments.tsv) (`U2`, factorized attention rank `64`) landed at `1.3702`.
+- [`AL-20260331-028`](./experiments.tsv) (`U3`, factorized MLP rank `256`) collapsed to `1.8307`.
+- [`AL-20260331-029`](./experiments.tsv) (`U4`, factorized MLP rank `128`) collapsed further to `2.1075`.
+- [`AL-20260331-030`](./experiments.tsv) (`U5`, combined attention+MLP factorization) landed at `1.4604`.
+
+**Reading**
+
+- naive low-rank factorization is not the right compression-native mechanism here
+- attention factorization preserves more than MLP factorization, but still loses too much quality
+- the MLP path is especially intolerant of this style of factorization
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: compression-native design remains important, but the next branch should not be another simple rank sweep
+
+## T-20260331-V: Top-Only Dynamic Depth Routing Revisit
+
+**Status:** completed
+
+**Goal**  
+Revisit AttnRes-lite only in the one region where the earlier tranche gave a weak positive signal: the very top of the stack.
+
+**Anchor**
+
+- [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+
+**Results**
+
+- [`AL-20260331-031`](./experiments.tsv) (`V1`, final layer only, two sources) improved to `1.3440`.
+- [`AL-20260331-032`](./experiments.tsv) (`V2`, top two layers, two sources) improved to `1.3443`.
+- [`AL-20260331-033`](./experiments.tsv) (`V3`, top-two shared-scalar routing) regressed to `1.3526`.
+- [`AL-20260331-034`](./experiments.tsv) (`V4`, final layer, three sources) regressed to `1.3465`.
+- [`AL-20260331-035`](./experiments.tsv) (`V5`, top-two routing plus shared skip gates) reached `1.3433`.
+
+**Reading**
+
+- top-only dynamic routing is a real secondary family
+- the revived family wants token-wise routing and very few source states
+- shared skip gates are complementary with the narrow top-only router
+- even the best result still trails the simpler skip-gate winner from tranche `S`
+
+**Outcome**
+
+- best result from this tranche: [`AL-20260331-035`](./experiments.tsv) at `1.3433`
+- main conclusion: dynamic depth routing is only viable when it is kept extremely narrow and top-heavy
+
+## T-20260331-W: Broad MLP Family Audit
+
+**Status:** completed
+
+**Goal**  
+Test whether the current `relu^2` MLP is actually the right broad activation family on the hybrid frontier.
+
+**Anchor**
+
+- [`AL-20260331-004`](./experiments.tsv) at `1.3451`
+
+**Results**
+
+- [`AL-20260331-036`](./experiments.tsv) (`W1`, `relu^2`) reproduced the frontier class at `1.3449`.
+- [`AL-20260331-037`](./experiments.tsv) (`W2`, `ReLU`) regressed to `1.3619`.
+- [`AL-20260331-038`](./experiments.tsv) (`W3`, `SiLU`) regressed to `1.3605`.
+- [`AL-20260331-039`](./experiments.tsv) (`W4`, `GELU`) regressed to `1.3607`.
+- [`AL-20260331-040`](./experiments.tsv) (`W5`, gated `SiLU`) stayed competitive at `1.3460`, but broke the size cap at `19.06 MB`.
+
+**Reading**
+
+- the broad MLP family still belongs to `relu^2`
+- smooth activation replacements are clearly worse on this backbone
+- the only live alternative is gated `SiLU`, but its size cost makes it a later compression/capacity problem rather than an immediate winner
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: keep `relu^2` as the broad MLP family anchor and only revisit gating under tighter size control
+
+## T-20260331-X: Polynomial MLP Audit
+
+**Status:** completed
+
+**Goal**  
+Probe deeper inside the polynomial MLP family rather than only comparing broad activation families.
+
+**Anchor**
+
+- [`AL-20260331-041`](./experiments.tsv) at `1.3451`
+
+**Results**
+
+- [`AL-20260331-042`](./experiments.tsv) (`X2`, `relu^3`) regressed badly to `1.3630`.
+- [`AL-20260331-043`](./experiments.tsv) (`X3`, `relu + 0.5 relu^2`) was the best non-anchor result at `1.3444`.
+- [`AL-20260331-044`](./experiments.tsv) (`X4`, `relu^2` plus cubic term) regressed to `1.3532`.
+- [`AL-20260331-045`](./experiments.tsv) (`X5`, norm-before-square) stayed near the frontier at `1.3456`, but still lost.
+
+**Reading**
+
+- cubic-heavy polynomial structure is the wrong direction
+- the only live alternative inside this family is mixing linear and quadratic behavior
+- normalization before squaring is respectable, but not obviously better than the plain baseline
+
+**Outcome**
+
+- no new winner from this tranche
+- main conclusion: if the MLP family is revisited later, use `relu + quadratic` as the live polynomial branch and ignore cubic-heavy variants

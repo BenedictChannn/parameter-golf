@@ -1,0 +1,99 @@
+{
+  "tranche_id": "T-20260331-S",
+  "title": "Hybrid Mixer + Cheap Routing Combo",
+  "research_question": "Do the hybrid lower-stack mixer win and the cheap-routing redesign win stack, or are they mostly buying the same effect?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-004",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "s1-full-cheap-routing-package",
+      "exp_id": "AL-20260331-016",
+      "goal": "Test the strongest justified architecture combo in the lab.",
+      "hypothesis": "The hybrid lower-stack mixer win and the cheap-routing package attack different inefficiencies and should stack.",
+      "what_it_teaches": "Whether the best two live architecture families are complementary or redundant.",
+      "why_worthy": "This is the most justified combo tranche in the repo right now because both parent families already produced real wins.",
+      "description": "apply shared skip gates, scalar resid_mix, and shared residual scales on top of the current hybrid winner",
+      "env": {
+        "SKIP_MODE": "shared_scalar",
+        "RESID_MIX_MODE": "scalar",
+        "RESID_SCALE_MODE": "shared_scalar"
+      }
+    },
+    {
+      "name": "s2-shared-skip-only",
+      "exp_id": "AL-20260331-017",
+      "goal": "Test whether skip gating is the compatible subpiece.",
+      "hypothesis": "Shared scalar skip gates may stack cleanly with the hybrid winner even if the rest of the routing package is too much.",
+      "what_it_teaches": "Whether skip gating is the main complementary part of the routing redesign.",
+      "why_worthy": "This cleanly isolates the strongest routing change without paying for the full package immediately.",
+      "description": "add only shared scalar skip gates to the current hybrid winner",
+      "env": {
+        "SKIP_MODE": "shared_scalar"
+      }
+    },
+    {
+      "name": "s3-scalar-resid-mix-only",
+      "exp_id": "AL-20260331-018",
+      "goal": "Test whether stream blending is the compatible subpiece.",
+      "hypothesis": "The hybrid winner may want simpler residual-stream blending without also changing skip topology.",
+      "what_it_teaches": "Whether the main interaction is in stream mixing rather than skip routing.",
+      "why_worthy": "This is the cleanest way to separate skip effects from stream-blending effects.",
+      "description": "replace full per-channel resid_mix with a shared scalar on the current hybrid winner",
+      "env": {
+        "RESID_MIX_MODE": "scalar"
+      }
+    },
+    {
+      "name": "s4-shared-residual-scales-only",
+      "exp_id": "AL-20260331-019",
+      "goal": "Test whether coarser branch scaling is the compatible part.",
+      "hypothesis": "The hybrid winner may benefit from simpler branch scaling even if skip and stream routing stay unchanged.",
+      "what_it_teaches": "Whether branch-scale simplification is the main compatible routing change.",
+      "why_worthy": "This isolates the third routing component cleanly, which matters because the earlier routing tranche showed interaction effects.",
+      "description": "use shared residual scales only on top of the current hybrid winner",
+      "env": {
+        "RESID_SCALE_MODE": "shared_scalar"
+      }
+    },
+    {
+      "name": "s5-full-package-plus-head-cooldown",
+      "exp_id": "AL-20260331-020",
+      "goal": "Test whether the best combo branch wants one light support intervention near export.",
+      "hypothesis": "If the routing combo is real, a head-focused final cooldown may help the compressed model close the remaining gap.",
+      "what_it_teaches": "Whether combo branches need light schedule support rather than more architecture changes.",
+      "why_worthy": "This is the only justified combo-on-combo run because head-focused cooldown was the only live schedule hint left.",
+      "description": "apply the full cheap-routing package plus a head-focused final cooldown",
+      "env": {
+        "SKIP_MODE": "shared_scalar",
+        "RESID_MIX_MODE": "scalar",
+        "RESID_SCALE_MODE": "shared_scalar",
+        "FINAL_STABILIZE_STEPS": "100",
+        "FINAL_HEAD_LR_SCALE": "0.25",
+        "FINAL_BACKBONE_LR_SCALE": "1.0"
+      }
+    }
+  ]
+}

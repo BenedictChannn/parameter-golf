@@ -1,0 +1,93 @@
+{
+  "tranche_id": "T-20260331-U",
+  "title": "Compression-Native Backbone Audit",
+  "research_question": "Can structured low-rank factorization inside the backbone preserve enough quality to become a real compression-native direction, rather than training a dense model and compressing later?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-004",
+  "implementation_status": "runnable",
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "u1-factorized-attention-128",
+      "exp_id": "AL-20260331-026",
+      "goal": "Test whether attention projections are overbuilt for the compressed artifact.",
+      "hypothesis": "Moderate factorization inside attention may save bytes and memory with less quality loss than expected.",
+      "what_it_teaches": "Whether attention is a good compression-native target on the current backbone.",
+      "why_worthy": "The leaderboard repeatedly suggests compression-aware structure matters; this is the cleanest first backbone test in that direction.",
+      "description": "factorize attention projections at rank 128",
+      "env": {
+        "FACTOR_ATTN_RANK": "128"
+      }
+    },
+    {
+      "name": "u2-factorized-attention-64",
+      "exp_id": "AL-20260331-027",
+      "goal": "Push attention factorization harder after the milder bracket.",
+      "hypothesis": "Attention may tolerate a surprisingly aggressive factorization before quality collapses.",
+      "what_it_teaches": "How steep the attention-factorization tradeoff is.",
+      "why_worthy": "This is the correct bracket pair for deciding whether the idea is mildly useful or fundamentally strong.",
+      "description": "factorize attention projections at rank 64",
+      "env": {
+        "FACTOR_ATTN_RANK": "64"
+      }
+    },
+    {
+      "name": "u3-factorized-mlp-256",
+      "exp_id": "AL-20260331-028",
+      "goal": "Test whether MLP projections are the cleaner compression target.",
+      "hypothesis": "The MLP may be wasting more dense projection structure than the attention block is.",
+      "what_it_teaches": "Whether the feedforward path is a better compression-native target than attention.",
+      "why_worthy": "This attacks a different major cost center and helps answer where the backbone is actually overbuilt.",
+      "description": "factorize MLP projections at rank 256",
+      "env": {
+        "FACTOR_MLP_RANK": "256"
+      }
+    },
+    {
+      "name": "u4-factorized-mlp-128",
+      "exp_id": "AL-20260331-029",
+      "goal": "Push MLP factorization harder.",
+      "hypothesis": "The MLP may tolerate stronger factorization than attention because it is already a wide token-local transform.",
+      "what_it_teaches": "How steep the MLP-factorization tradeoff is.",
+      "why_worthy": "This is the right aggression bracket once the milder MLP factorization is represented.",
+      "description": "factorize MLP projections at rank 128",
+      "env": {
+        "FACTOR_MLP_RANK": "128"
+      }
+    },
+    {
+      "name": "u5-factorized-both-moderate",
+      "exp_id": "AL-20260331-030",
+      "goal": "Test whether modest factorization across both major dense subsystems works better than pushing one subsystem too hard.",
+      "hypothesis": "A distributed compression-native cut may preserve quality better than a single aggressive cut.",
+      "what_it_teaches": "Whether compression-native structure wants to be shared across attention and MLP together.",
+      "why_worthy": "This is the most justified combo inside the factorization family and directly answers whether the gains are subsystem-specific or shared.",
+      "description": "factorize attention at rank 128 and MLP at rank 256 together",
+      "env": {
+        "FACTOR_ATTN_RANK": "128",
+        "FACTOR_MLP_RANK": "256"
+      }
+    }
+  ]
+}
