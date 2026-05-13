@@ -1,0 +1,108 @@
+{
+  "tranche_id": "T-20260401-AD",
+  "title": "Latent Upper Reasoner",
+  "research_question": "Can the upper stack preserve global reasoning quality while operating over a compact latent sequence instead of the full token stream?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-017",
+  "implementation_status": "runnable",
+  "implementation_notes": [
+    "Implemented via LATENT_REASONER_* env knobs that replace selected upper attention blocks with a pooled latent sequence, causal latent attention, and shifted token writeback.",
+    "The learned mode adds slot embeddings; the pooled mode uses pure sequence-derived latent slots.",
+    "This is a causality-safe first pass at latent upper reasoning rather than a full Perceiver-style cross-attention stack."
+  ],
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "SKIP_MODE": "shared_scalar",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "ad1-top2-learned-latent-reasoner",
+      "exp_id": "AL-20260401-071",
+      "goal": "Test whether the final two reasoning layers can operate on a compact latent sequence.",
+      "hypothesis": "A learned-slot latent workspace may preserve most top-of-stack global reasoning while reducing token-space burden.",
+      "what_it_teaches": "Whether latent reasoning is viable as a top-of-stack replacement.",
+      "why_worthy": "This is the most direct first test of a latent upper reasoner without rewriting the whole upper stack.",
+      "description": "replace the final two attention layers with a learned-slot latent upper reasoner",
+      "env": {
+        "LATENT_REASONER_LAYERS": "7,8",
+        "LATENT_REASONER_SLOTS": "16",
+        "LATENT_REASONER_MODE": "learned"
+      }
+    },
+    {
+      "name": "ad2-full-upper-learned-latent-reasoner",
+      "exp_id": "AL-20260401-072",
+      "goal": "Test whether the entire upper reasoning band wants to operate in a compact latent space.",
+      "hypothesis": "The upper stack may be overpaying for full token-space reasoning and prefer a learned latent sequence instead.",
+      "what_it_teaches": "Whether latent reasoning should be top-only or a full upper-stage design.",
+      "why_worthy": "This is the bold version of the same question and attacks upper-stack memory/compute waste directly.",
+      "description": "replace the full upper attention stack with a learned-slot latent upper reasoner",
+      "env": {
+        "LATENT_REASONER_LAYERS": "4,5,6,7,8",
+        "LATENT_REASONER_SLOTS": "16",
+        "LATENT_REASONER_MODE": "learned"
+      }
+    },
+    {
+      "name": "ad3-top2-pooled-summary-bank",
+      "exp_id": "AL-20260401-073",
+      "goal": "Test whether sequence-derived latent summaries work better than fixed learned slots.",
+      "hypothesis": "A pooled summary bank may retain sequence structure better than learned latent slots at this scale.",
+      "what_it_teaches": "Whether the latent workspace should be learned and fixed or directly derived from the current sequence.",
+      "why_worthy": "This separates the latent bottleneck idea from the learned-slot implementation choice.",
+      "description": "use pooled latent summaries instead of learned slots for the final two reasoning layers",
+      "env": {
+        "LATENT_REASONER_LAYERS": "7,8",
+        "LATENT_REASONER_SLOTS": "16",
+        "LATENT_REASONER_MODE": "pooled"
+      }
+    },
+    {
+      "name": "ad4-periodic-latent-reasoning",
+      "exp_id": "AL-20260401-074",
+      "goal": "Test whether latent reasoning works best as a periodic global consolidation step rather than a full replacement.",
+      "hypothesis": "Interleaving normal upper attention with latent reasoning may preserve quality better than replacing the whole upper stage.",
+      "what_it_teaches": "Whether latent reasoning is most useful as periodic consolidation.",
+      "why_worthy": "This is the best bridge between the current `AA4` interleaving clue and a bolder latent upper-stack rethink.",
+      "description": "interleave latent-reasoner blocks through the upper stack instead of replacing all upper attention",
+      "env": {
+        "LATENT_REASONER_LAYERS": "4,6,8",
+        "LATENT_REASONER_SLOTS": "16",
+        "LATENT_REASONER_MODE": "pooled"
+      }
+    },
+    {
+      "name": "ad5-top3-learned-latent-reasoner",
+      "exp_id": "AL-20260401-075",
+      "goal": "Test a middle ground between top-only latent reasoning and full upper-stage replacement.",
+      "hypothesis": "The upper stack may want a broader but still partial latent reasoning band rather than only the top two layers.",
+      "what_it_teaches": "Whether the latent reasoning sweet spot is top-only, full-upper, or an intermediate upper band.",
+      "why_worthy": "This gives the latent branch a proper placement sweep instead of only two extremes.",
+      "description": "replace the top three attention layers with a learned-slot latent upper reasoner",
+      "env": {
+        "LATENT_REASONER_LAYERS": "6,7,8",
+        "LATENT_REASONER_SLOTS": "12",
+        "LATENT_REASONER_MODE": "learned"
+      }
+    }
+  ]
+}

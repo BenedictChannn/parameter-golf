@@ -1,0 +1,127 @@
+{
+  "tranche_id": "T-20260401-AC",
+  "title": "Conditional Heavy Light Compute",
+  "research_question": "Can a small model improve its loss-compute trade by spending expensive attention and FFN compute only on routed important tokens instead of treating every token equally?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-017",
+  "implementation_status": "runnable",
+  "implementation_notes": [
+    "Implemented via TOKEN_SELECTIVE_* env knobs that route top-k tokens into heavy FFN and/or attention branches.",
+    "The light attention path uses a cheap mixer-style update; the light FFN path uses the existing no-expand polynomial family.",
+    "This is a first pass at token-selective compute, not a full MoD-style training stack."
+  ],
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "SKIP_MODE": "shared_scalar",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "ac1-top-only-heavy-ffn-routing",
+      "exp_id": "AL-20260401-066",
+      "goal": "Test whether only a small subset of top-layer tokens needs full FFN refinement.",
+      "hypothesis": "Top-only selective FFN compute can preserve quality while avoiding uniform heavy refinement at the very top.",
+      "what_it_teaches": "Whether the most expensive token-wise compute should be concentrated only at the output-facing stage.",
+      "why_worthy": "This is the cleanest first test of token-selective compute in the part of the stack where refinement matters most.",
+      "description": "route top-layer tokens into heavy FFNs while all tokens get a lighter polynomial FFN path",
+      "env": {
+        "TOKEN_SELECTIVE_LAYERS": "7,8",
+        "TOKEN_SELECTIVE_MODE": "ffn",
+        "TOKEN_SELECTIVE_TOPK_RATIO": "0.25",
+        "TOKEN_SELECTIVE_ROUTER": "learned",
+        "TOKEN_SELECTIVE_LIGHT_MLP_STRUCTURE": "no_expand_linear_quad",
+        "TOKEN_SELECTIVE_LIGHT_MLP_MULT": "1"
+      }
+    },
+    {
+      "name": "ac2-full-upper-heavy-ffn-routing",
+      "exp_id": "AL-20260401-067",
+      "goal": "Test whether the whole upper reasoning band wants selective FFN compute, not just the final two layers.",
+      "hypothesis": "The upper stack may benefit from repeated token-selective FFN refinement rather than uniform FFNs everywhere.",
+      "what_it_teaches": "Whether selective FFN compute should be a top-only trick or an upper-stack design principle.",
+      "why_worthy": "This distinguishes a narrow top refinement story from a broader token-selective upper-stack regime.",
+      "description": "route upper-stack tokens into heavy FFNs while keeping a lighter FFN path for everyone",
+      "env": {
+        "TOKEN_SELECTIVE_LAYERS": "4,5,6,7,8",
+        "TOKEN_SELECTIVE_MODE": "ffn",
+        "TOKEN_SELECTIVE_TOPK_RATIO": "0.25",
+        "TOKEN_SELECTIVE_ROUTER": "learned",
+        "TOKEN_SELECTIVE_LIGHT_MLP_STRUCTURE": "no_expand_linear_quad",
+        "TOKEN_SELECTIVE_LIGHT_MLP_MULT": "1"
+      }
+    },
+    {
+      "name": "ac3-heavy-attention-on-routed-tokens",
+      "exp_id": "AL-20260401-068",
+      "goal": "Test whether only a subset of upper-stack tokens needs full global attention.",
+      "hypothesis": "Many tokens may only need a cheap local-ish update, while a routed minority needs full global attention.",
+      "what_it_teaches": "Whether selective attention is more important than selective FFN compute.",
+      "why_worthy": "This directly questions the assumption that every upper-stack token deserves the same global reasoning budget.",
+      "description": "use a light mixer path for all upper tokens and add full attention only for routed important tokens",
+      "env": {
+        "TOKEN_SELECTIVE_LAYERS": "4,5,6,7,8",
+        "TOKEN_SELECTIVE_MODE": "attn",
+        "TOKEN_SELECTIVE_TOPK_RATIO": "0.25",
+        "TOKEN_SELECTIVE_ROUTER": "learned",
+        "TOKEN_SELECTIVE_LIGHT_ATTN_DIM": "160",
+        "TOKEN_SELECTIVE_LIGHT_ATTN_KERNEL": "4"
+      }
+    },
+    {
+      "name": "ac4-joint-heavy-token-path",
+      "exp_id": "AL-20260401-069",
+      "goal": "Test whether the right abstraction is a full heavy-token path rather than separate heavy attention or heavy FFN decisions.",
+      "hypothesis": "The model may want a small subset of important tokens to receive both heavy attention and heavy FFN updates together.",
+      "what_it_teaches": "Whether token-selective compute should be understood as a coherent heavy-path routing mechanism.",
+      "why_worthy": "This is the boldest and most faithful version of the conditional-compute question in one tranche.",
+      "description": "give routed upper-stack tokens both heavy attention and heavy FFN updates while everyone else follows the light path",
+      "env": {
+        "TOKEN_SELECTIVE_LAYERS": "4,5,6,7,8",
+        "TOKEN_SELECTIVE_MODE": "joint",
+        "TOKEN_SELECTIVE_TOPK_RATIO": "0.25",
+        "TOKEN_SELECTIVE_ROUTER": "learned",
+        "TOKEN_SELECTIVE_LIGHT_MLP_STRUCTURE": "no_expand_linear_quad",
+        "TOKEN_SELECTIVE_LIGHT_MLP_MULT": "1",
+        "TOKEN_SELECTIVE_LIGHT_ATTN_DIM": "160",
+        "TOKEN_SELECTIVE_LIGHT_ATTN_KERNEL": "4"
+      }
+    },
+    {
+      "name": "ac5-heuristic-proxy-routing",
+      "exp_id": "AL-20260401-070",
+      "goal": "Test whether selective allocation itself matters even before a learned router is optimized well.",
+      "hypothesis": "If token-selective compute is the right principle, a crude importance proxy like token norm should still show some signal.",
+      "what_it_teaches": "Whether the main gain comes from the allocation idea or only from a learned router.",
+      "why_worthy": "This de-risks the interpretation of failures by separating routing quality from the heavy/light compute idea itself.",
+      "description": "use norm-based heuristic token routing for the joint heavy-token path",
+      "env": {
+        "TOKEN_SELECTIVE_LAYERS": "4,5,6,7,8",
+        "TOKEN_SELECTIVE_MODE": "joint",
+        "TOKEN_SELECTIVE_TOPK_RATIO": "0.25",
+        "TOKEN_SELECTIVE_ROUTER": "norm",
+        "TOKEN_SELECTIVE_LIGHT_MLP_STRUCTURE": "no_expand_linear_quad",
+        "TOKEN_SELECTIVE_LIGHT_MLP_MULT": "1",
+        "TOKEN_SELECTIVE_LIGHT_ATTN_DIM": "160",
+        "TOKEN_SELECTIVE_LIGHT_ATTN_KERNEL": "4"
+      }
+    }
+  ]
+}

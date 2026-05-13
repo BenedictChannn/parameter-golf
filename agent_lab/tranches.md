@@ -1139,3 +1139,214 @@ Probe deeper inside the polynomial MLP family rather than only comparing broad a
 
 - no new winner from this tranche
 - main conclusion: if the MLP family is revisited later, use `relu + quadratic` as the live polynomial branch and ignore cubic-heavy variants
+
+## Next Bold Question Queue
+
+These are the next architecture tranches after `S` through `X`. They are now **runnable** and live under [`tranche_manifests/`](./tranche_manifests/).
+
+Recommended order:
+
+1. [`T-20260401-Y`](./tranche_manifests/20260401-Y-mlp-structure-minimalism.json) MLP Structure Minimalism
+2. [`T-20260401-Z`](./tranche_manifests/20260401-Z-block-uniformity-audit.json) Block Uniformity Audit
+3. [`T-20260401-AB`](./tranche_manifests/20260401-AB-compression-native-sharing.json) Compression-Native Sharing Audit
+4. [`T-20260401-AA`](./tranche_manifests/20260401-AA-upper-attention-decomposition.json) Upper Attention Decomposition Audit
+
+Top-level chain:
+
+- [`P-20260401-YZABAA`](./program_manifests/20260401-YZABAA.json)
+
+### T-20260401-Y: MLP Structure Minimalism
+
+**Status:** completed
+
+**Goal**  
+Question the dense expand-project FFN assumption directly instead of only comparing activation families.
+
+**Main question**  
+Does every block really need a full dense project-up then project-down MLP, or can some of that structure be removed or replaced by a lighter tokenwise computation?
+
+**Why this is next-worthy**
+
+- it attacks one of the biggest unproven assumptions in the whole model
+- the MLP is a major parameter and compute sink
+- our current findings tell us which nonlinear families are live, but not whether the FFN structure itself is overbuilt
+
+**Planned experiments**
+
+- `Y1`: no-expand in-place quadratic MLP everywhere
+- `Y2`: half-width dense MLP everywhere
+- `Y3`: structured linear-plus-quadratic no-expand MLP
+- `Y4`: light lower-stack MLP, full upper-stack MLP
+- `Y5`: full top-stack MLP, lighter MLP elsewhere
+
+**Key interpretation**
+
+- if `Y1` or `Y3` survives, full expand-project FFNs are overbuilt
+- if `Y4` or `Y5` survives, MLP richness is a depth-specific resource
+
+**Outcome**
+
+- no winner from this tranche
+- `Y1` and `Y3` failed hard, which means the current frontier does not reduce to a no-expand tokenwise MLP story
+- `Y2` and `Y5` also lost clearly, so broad shrinking of dense FFNs is not enough
+- [`AL-20260401-049`](./experiments.tsv) was the only partial survivor, suggesting lower-stack MLP lightening is the only live follow-up inside this family
+
+### T-20260401-Z: Block Uniformity Audit
+
+**Status:** completed
+
+**Goal**  
+Question the assumption that every layer deserves the same full block recipe.
+
+**Main question**  
+Why should every block contain both token mixing and an FFN, and can some stages use mixer-only or MLP-light blocks instead?
+
+**Why this is next-worthy**
+
+- it is one of the cleanest childlike architectural questions available
+- the repo already rewards strong depth specialization
+- it attacks compute uniformity rather than just another local knob
+
+**Planned experiments**
+
+- `Z1`: lower two mixer layers become mixer-only blocks
+- `Z2`: lower four mixer layers become mixer-only blocks
+- `Z3`: alternate standard and mixer-only blocks in the lower stack
+- `Z4`: lower stack uses MLP-light blocks, upper stack uses full blocks
+- `Z5`: periodic heavy blocks every two layers
+
+**Key interpretation**
+
+- if `Z1`, `Z3`, or `Z4` works, the current block template is too uniform
+- if `Z5` works, compute should be concentrated rather than evenly distributed
+
+**Outcome**
+
+- [`AL-20260401-051`](./experiments.tsv) crashed because `mixer_only` blocks still instantiated dead `mlp_scale` parameters, which tripped DDP unused-parameter detection; this was fixed in commit `97222ab`
+- [`AL-20260401-052`](./experiments.tsv) and [`AL-20260401-054`](./experiments.tsv) show that blanket lower-stage FFN removal or broad lower-light blocks lose too much quality
+- [`AL-20260401-053`](./experiments.tsv) stayed close, which means alternating lower standard and mixer-only blocks is a real near-survivor
+- [`AL-20260401-055`](./experiments.tsv) nearly tied the frontier, which suggests periodic heavy/light block concentration is the most interesting live signal in the family
+- current conclusion: block non-uniformity is real, but the good version looks periodic rather than “make the whole lower stage cheap”
+
+### T-20260401-AB: Compression-Native Sharing Audit
+
+**Status:** completed
+
+**Goal**  
+Try a compression-native architecture direction that is qualitatively different from naive low-rank factorization.
+
+**Main question**  
+Can stage-specific structure be shared across similar layers, so the model stops relearning the same transformation with different private weights?
+
+**Why this is next-worthy**
+
+- low-rank factorization already failed clearly
+- compression-native design is still one of our biggest open gaps
+- the current frontier theory says lower and upper stages each do repeated specialized jobs, which makes sharing plausible
+
+**Planned experiments**
+
+- `AB1`: share weights across the lower two mixer blocks
+- `AB2`: share weights across all four lower mixer blocks
+- `AB3`: share weights across the top two attention blocks
+- `AB4`: share lower mixer weights and reinvest into a wider mixer
+- `AB5`: share lower mixer weights and reinvest into one more upper reasoning layer
+
+**Key interpretation**
+
+- if `AB1` or `AB2` works, the lower stage is structurally repetitive and overparameterized
+- if `AB4` or `AB5` wins, sharing is useful mainly as reallocation rather than pure savings
+
+**Outcome**
+
+- no winner from this tranche
+- [`AL-20260401-061`](./experiments.tsv) was the least bad sharing run, but still clearly behind the frontier
+- broad lower-stage sharing, top-two attention sharing, and both share-to-reallocate variants all lost
+- current conclusion: naive whole-block sharing is not the next compression-native architecture win
+
+### T-20260401-AA: Upper Attention Decomposition Audit
+
+**Status:** completed
+
+**Goal**  
+Question what the remaining upper attention layers are actually doing now that the lower stack is already simplified.
+
+**Main question**  
+How much full global attention does the upper stack still need, and is the very top of the network doing a qualitatively different reasoning job?
+
+**Why this is next-worthy**
+
+- local-window replacement lost, but that only killed one simplification story
+- we still have not isolated which pieces of the remaining upper attention are essential
+- top-only routing being alive hints that the top of the stack may be special
+
+**Planned experiments**
+
+- `AA1`: keep only top three layers as full global attention
+- `AA2`: keep only top two layers as full global attention
+- `AA3`: top two global-attention layers plus top-only routing
+- `AA4`: interleave upper attention and upper lighter refinement blocks
+- `AA5`: one final rich global reasoner layer only
+
+**Key interpretation**
+
+- if `AA1` or `AA2` works, upper attention is over-provisioned
+- if `AA3` works, top-of-stack routing is part of final reasoning
+- if `AA4` works, periodic global refresh beats dense upper attention
+
+**Outcome**
+
+- no winner from this tranche
+- [`AL-20260401-059`](./experiments.tsv) was by far the best result and nearly tied the frontier, which makes interleaved upper attention the only live survivor
+- `AA1` was only a mild loss, but `AA2`, `AA3`, and `AA5` all failed clearly
+- current conclusion: the upper stack may be simplifiable by interleaving, but not by collapsing it to only one or two global reasoners
+
+### T-20260401-AC: Conditional Heavy Light Compute
+
+**Status:** completed
+
+**Goal**  
+Test whether the model should spend full upper-stack attention and FFN compute only on routed important tokens.
+
+**Main question**  
+Is token-selective compute the next big efficiency frontier, rather than another uniform layer-wise simplification?
+
+**Outcome**
+
+- [`AL-20260401-066`](./experiments.tsv) was the only non-catastrophic result, and it still lost clearly
+- [`AL-20260401-067`](./experiments.tsv) shows that broad upper-stack selective FFN routing is too destructive in this first form
+- [`AL-20260401-068`](./experiments.tsv), [`AL-20260401-069`](./experiments.tsv), and [`AL-20260401-070`](./experiments.tsv) show that token-selective heavy attention and joint heavy-token paths are disastrous
+- current conclusion: naive token-selective compute is the wrong first efficiency path on this backbone, especially once global attention becomes token-selective
+
+### T-20260401-AD: Latent Upper Reasoner
+
+**Status:** blocked after first crash
+
+**Goal**  
+Test whether the upper stack can preserve global reasoning quality while operating over a compact latent sequence.
+
+**Main question**  
+Can upper reasoning move off the full token stream and into a smaller latent workspace?
+
+**Current outcome**
+
+- [`AL-20260401-071`](./experiments.tsv) crashed immediately on the first learned-slot candidate before producing a metric
+- no scientific conclusion yet; the family remains operationally unresolved rather than falsified
+
+### T-20260401-AE: Structured Sharing With Layer Deltas
+
+**Status:** completed
+
+**Goal**  
+Test whether sub-block sharing plus small per-layer deltas beats the blunt compression-native stories that already failed.
+
+**Main question**  
+Can the model share structure across attention, mixer, or FFN submodules without giving up layer individuality?
+
+**Outcome**
+
+- [`AL-20260401-077`](./experiments.tsv) was the best run and showed that lower-mixer pair-sharing with deltas is a real near-survivor
+- [`AL-20260401-080`](./experiments.tsv) stayed similarly close while widening the mixer, which supports a share-then-reallocate interpretation
+- [`AL-20260401-076`](./experiments.tsv) and [`AL-20260401-079`](./experiments.tsv) show that upper-attention sharing is survivable but weaker, especially when the sharing span grows broader
+- [`AL-20260401-078`](./experiments.tsv) shows FFN sharing remains the weakest target
+- current conclusion: structured sharing with small deltas revives compression-native sharing, but mainly as a lower-stage pairwise mechanism rather than a broad upper-band or FFN-sharing story

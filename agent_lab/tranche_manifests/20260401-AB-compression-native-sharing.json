@@ -1,0 +1,101 @@
+{
+  "tranche_id": "T-20260401-AB",
+  "title": "Compression-Native Sharing Audit",
+  "research_question": "Can the model save bytes by sharing stage-specific structure across similar layers instead of relearning similar transformations with separate weights or destroying them with naive low-rank factorization?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-017",
+  "implementation_status": "runnable",
+  "implementation_notes": [
+    "Implemented via SHARE_BLOCK_GROUPS, which reuses one canonical block across the group plus per-layer scalar gains on alias layers.",
+    "Shared layers are deduplicated in GPT.state_dict so artifact-size accounting stays honest.",
+    "This tests sharing/reuse as the compression-native mechanism rather than another low-rank sweep."
+  ],
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "SKIP_MODE": "shared_scalar",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "ab1-share-lower-two-mixer-weights",
+      "exp_id": "AL-20260401-061",
+      "goal": "Ask whether the earliest lower-stage transformations are repetitive enough to share directly.",
+      "hypothesis": "The first lower mixer blocks may be doing similar enough work that separate weights are wasted.",
+      "what_it_teaches": "Whether the lower stage is structurally repetitive and overparameterized.",
+      "why_worthy": "This is the cleanest first sharing test and attacks compression-native design without factorization.",
+      "description": "share the full block weights across the first two lower mixer layers with per-layer scaling only",
+      "env": {
+        "SHARE_BLOCK_GROUPS": "0,1"
+      }
+    },
+    {
+      "name": "ab2-share-all-lower-mixer-weights",
+      "exp_id": "AL-20260401-062",
+      "goal": "Push the lower-stage sharing idea through the whole lower mixer band.",
+      "hypothesis": "The whole lower mixer stage may behave more like repeated refinement than four distinct computations.",
+      "what_it_teaches": "Whether lower-stage uniqueness is overestimated.",
+      "why_worthy": "This is the bold version of the same compression-native question, not just a timid follow-up.",
+      "description": "share block weights across all four lower mixer layers with per-layer scaling only",
+      "env": {
+        "SHARE_BLOCK_GROUPS": "0,1,2,3"
+      }
+    },
+    {
+      "name": "ab3-share-top-two-attention-weights",
+      "exp_id": "AL-20260401-063",
+      "goal": "Ask whether top reasoning layers are more repetitive than the current architecture assumes.",
+      "hypothesis": "The top two attention blocks may be repeating a similar selection/refinement computation and can share most of their weights.",
+      "what_it_teaches": "Whether upper refinement or lower structure is the better sharing surface.",
+      "why_worthy": "This is the sharpest top-stage compression-native test that still respects the current frontier theory.",
+      "description": "share the top two attention blocks with small per-layer scaling parameters",
+      "env": {
+        "SHARE_BLOCK_GROUPS": "7,8"
+      }
+    },
+    {
+      "name": "ab4-share-lower-then-widen-mixer",
+      "exp_id": "AL-20260401-064",
+      "goal": "Test whether sharing is more useful as reallocation than as pure savings.",
+      "hypothesis": "If lower-stage sharing is viable, the saved bytes are better spent on a wider lower mixer than simply pocketed.",
+      "what_it_teaches": "Whether the right story is share-to-reallocate rather than share-to-save.",
+      "why_worthy": "This is the most justified reinvestment run in the sharing family.",
+      "description": "share the lower mixer stage and reinvest saved bytes into a wider mixer width",
+      "env": {
+        "SHARE_BLOCK_GROUPS": "0,1,2,3",
+        "MIXER_DIM": "384"
+      }
+    },
+    {
+      "name": "ab5-share-lower-then-add-upper-reasoner",
+      "exp_id": "AL-20260401-065",
+      "goal": "Test whether saved lower-stage budget is better spent on one more upper reasoning step.",
+      "hypothesis": "Repeated lower-stage work may be overparameterized, and the best reinvestment is one extra upper reasoning layer rather than richer lower mixers.",
+      "what_it_teaches": "Whether compression-native sharing should reallocate budget upward in the stack.",
+      "why_worthy": "This asks the most important second-order question after any sharing success: what should the savings buy?",
+      "description": "share the lower mixer stage and use the saved budget for one extra upper reasoning layer",
+      "env": {
+        "SHARE_BLOCK_GROUPS": "0,1,2,3",
+        "NUM_LAYERS": "10",
+        "MIXER_LAYERS": "0,1,2,3"
+      }
+    }
+  ]
+}

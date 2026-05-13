@@ -1,0 +1,103 @@
+{
+  "tranche_id": "T-20260401-Z",
+  "title": "Block Uniformity Audit",
+  "research_question": "Why do we assume every block must contain both token mixing and an FFN, and can the model benefit from stage-specific or periodic heavy blocks instead of one uniform block recipe?",
+  "primary_metric": "final_int8_ttt_lora",
+  "run_script": "scripts/agent_lab/run_exp.sh",
+  "results_tsv": "agent_lab/results.tsv",
+  "experiments_tsv": "agent_lab/experiments.tsv",
+  "anchor_exp_id": "AL-20260331-017",
+  "implementation_status": "runnable",
+  "implementation_notes": [
+    "Implemented via BLOCK_MODE=custom and per-layer BLOCK_TYPES.",
+    "Supports mixer_only, mixer_light, light, heavy, and standard block recipes.",
+    "Removed FFN sublayers now skip the MLP residual path explicitly rather than leaving a silent no-op."
+  ],
+  "fixed_env": {
+    "DATA_PATH": "./data/datasets/fineweb10B_sp1024/",
+    "TOKENIZER_PATH": "./data/tokenizers/fineweb_1024_bpe.model",
+    "VOCAB_SIZE": "1024",
+    "MAX_WALLCLOCK_SECONDS": "600",
+    "SEED": "1337",
+    "NUM_LAYERS": "9",
+    "MODEL_DIM": "512",
+    "MLP_MULT": "2",
+    "TRAIN_BATCH_TOKENS": "98304",
+    "NUM_HEADS": "4",
+    "NUM_KV_HEADS": "2",
+    "MIXER_LAYERS": "0,1,2,3",
+    "MIXER_DIM": "320",
+    "MIXER_KERNEL": "4",
+    "TIE_EMBEDDINGS": "0",
+    "SKIP_MODE": "shared_scalar",
+    "LOGIT_SOFTCAP": "20",
+    "HEAD_LR": "0.012"
+  },
+  "candidates": [
+    {
+      "name": "z1-lower-two-mixer-only",
+      "exp_id": "AL-20260401-051",
+      "goal": "Ask whether the earliest lower-stack blocks need any FFN at all.",
+      "hypothesis": "The first lower mixer-heavy blocks may only need sequence mixing, not full per-token FFN work.",
+      "what_it_teaches": "Whether the block recipe is already too heavy in the earliest lower stage.",
+      "why_worthy": "This is one of the cleanest childlike questions in the whole model.",
+      "description": "turn the first two lower mixer blocks into mixer-only blocks with no FFN sublayer",
+      "env": {
+        "BLOCK_MODE": "custom",
+        "BLOCK_TYPES": "mixer_only,mixer_only,standard,standard,standard,standard,standard,standard,standard"
+      }
+    },
+    {
+      "name": "z2-lower-four-mixer-only",
+      "exp_id": "AL-20260401-052",
+      "goal": "Push the mixer-only idea through the full lower mixer stage.",
+      "hypothesis": "Once the lower stack is already mixer-heavy, its FFNs may be largely redundant.",
+      "what_it_teaches": "Whether lower-stage block simplification scales beyond a timid first step.",
+      "why_worthy": "This directly tests whether the current lower-four hybrid still overpays for uniform per-block FFNs.",
+      "description": "make all four lower mixer layers mixer-only blocks with no FFN sublayer",
+      "env": {
+        "BLOCK_MODE": "custom",
+        "BLOCK_TYPES": "mixer_only,mixer_only,mixer_only,mixer_only,standard,standard,standard,standard,standard"
+      }
+    },
+    {
+      "name": "z3-alternating-full-and-mixer-only-lower",
+      "exp_id": "AL-20260401-053",
+      "goal": "Test whether heavy nonlinear refinement only needs to happen periodically.",
+      "hypothesis": "The lower stack may only need a full FFN every other layer rather than after every mixer step.",
+      "what_it_teaches": "Whether compute should be periodic rather than uniform.",
+      "why_worthy": "This is the best first test of concentrated rather than evenly distributed block compute.",
+      "description": "alternate standard and mixer-only blocks through the lower mixer stage",
+      "env": {
+        "BLOCK_MODE": "custom",
+        "BLOCK_TYPES": "standard,mixer_only,standard,mixer_only,standard,standard,standard,standard,standard"
+      }
+    },
+    {
+      "name": "z4-lower-light-upper-full-blocks",
+      "exp_id": "AL-20260401-054",
+      "goal": "Test whether lower and upper stages deserve different block recipes.",
+      "hypothesis": "The lower stack is mainly building structure, while upper layers do the expensive per-token refinement.",
+      "what_it_teaches": "Whether stage specialization beats one uniform block template.",
+      "why_worthy": "This follows the strongest repo-wide theme directly rather than treating all layers as equivalent.",
+      "description": "use MLP-light blocks in the lower stack and full standard blocks in the upper stack",
+      "env": {
+        "BLOCK_MODE": "custom",
+        "BLOCK_TYPES": "mixer_light,mixer_light,mixer_light,mixer_light,standard,standard,standard,standard,standard"
+      }
+    },
+    {
+      "name": "z5-periodic-heavy-blocks",
+      "exp_id": "AL-20260401-055",
+      "goal": "Concentrate heavy computation into fewer layers instead of spreading it evenly.",
+      "hypothesis": "Capacity may be better concentrated into fewer heavy blocks than paid in every block.",
+      "what_it_teaches": "Whether the model wants periodic heavy refinement rather than uniform mid-strength blocks.",
+      "why_worthy": "This questions one of the most standard transformer assumptions in a mechanically clean way.",
+      "description": "use periodic heavy full blocks every two layers and lighter blocks elsewhere",
+      "env": {
+        "BLOCK_MODE": "custom",
+        "BLOCK_TYPES": "heavy,light,heavy,light,heavy,light,heavy,light,heavy"
+      }
+    }
+  ]
+}

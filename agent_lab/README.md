@@ -26,6 +26,9 @@ Design is inspired by [karpathy/autoresearch](https://github.com/karpathy/autore
 
 4. **Point your agent at `program.md`** and the Cursor skill **[`.cursor/skills/agent-lab/SKILL.md`](../.cursor/skills/agent-lab/SKILL.md)** (workflow + what to update after each run).
 
+   Fastest handoff pointer for a new session:
+   - [`START_HERE.md`](./START_HERE.md)
+
 5. **Journal / learning:** see **`docs/build-logs/`** for dated narrative logs (pedagogy + diary + code deltas), e.g. [`docs/build-logs/2026-03-28-agent-lab.md`](../docs/build-logs/2026-03-28-agent-lab.md).
 
 6. **Research memory surfaces:** keep the high-level state and hypothesis map current:

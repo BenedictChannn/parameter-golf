@@ -1,0 +1,11 @@
+{
+  "program_id": "P-20260401-ACADAE",
+  "title": "Unknown Architecture Branches",
+  "description": "Three bold branches aimed at the current unknowns: token-selective heavy/light compute, latent upper reasoning, and structured sharing with layer deltas.",
+  "implementation_status": "runnable",
+  "tranches": [
+    "agent_lab/tranche_manifests/20260401-AC-conditional-heavy-light-compute.json",
+    "agent_lab/tranche_manifests/20260401-AD-latent-upper-reasoner.json",
+    "agent_lab/tranche_manifests/20260401-AE-structured-sharing-deltas.json"
+  ]
+}
